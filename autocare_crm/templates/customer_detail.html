@@ -281,6 +281,10 @@
                         <span class="text-sm text-gray-600 mr-2">빠른 입력:</span>
                         <div class="inline-flex flex-wrap gap-2">
                             <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="멤버쉽 안내 완료.">
+                                멤버쉽안내
+                            </button>
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
                                     data-template="검사만료 안내 완료. 다음 주 방문 예정">
                                 검사안내
                             </button>
@@ -293,7 +297,7 @@
                                 타이어
                             </button>
                             <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                                    data-template="보험 상담 완료. 관심 없음">
+                                    data-template="보험 상담 제안.">
                                 보험상담
                             </button>
                             <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
@@ -316,6 +320,7 @@
                         
                         <select name="interest_type" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
                             <option value="">관심분야</option>
+                            <option value="mebership" selected>멤버쉽제안</option>
                             <option value="insurance">보험</option>
                             <option value="maintenance">소모품교체</option>
                             <option value="financing">자동차금융</option>
