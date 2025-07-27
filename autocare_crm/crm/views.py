@@ -416,14 +416,33 @@ def customer_list(request):
     
     # 해피콜 필터
     happy_call_filter = request.GET.get('happy_call', '')
-    if happy_call_filter == '3month':
-        customers = customers.filter(needs_3month_call=True)
-    elif happy_call_filter == '6month':
-        customers = customers.filter(needs_6month_call=True)
-    elif happy_call_filter == '12month':
-        customers = customers.filter(needs_12month_call=True)
-    elif happy_call_filter == '18month':
-        customers = customers.filter(needs_18month_call=True)
+    if happy_call_filter:
+        today = timezone.now().date()
+        
+        if happy_call_filter == '3month':
+            target_date = today + timedelta(days=90)
+            customers = customers.filter(
+                inspection_expiry_date__gte=target_date - timedelta(days=1),
+                inspection_expiry_date__lte=target_date + timedelta(days=1)
+            )
+        elif happy_call_filter == '6month':
+            target_date = today + timedelta(days=180)
+            customers = customers.filter(
+                inspection_expiry_date__gte=target_date - timedelta(days=1),
+                inspection_expiry_date__lte=target_date + timedelta(days=1)
+            )
+        elif happy_call_filter == '12month':
+            target_date = today + timedelta(days=365)
+            customers = customers.filter(
+                inspection_expiry_date__gte=target_date - timedelta(days=1),
+                inspection_expiry_date__lte=target_date + timedelta(days=1)
+            )
+        elif happy_call_filter == '18month':
+            target_date = today + timedelta(days=548)
+            customers = customers.filter(
+                inspection_expiry_date__gte=target_date - timedelta(days=1),
+                inspection_expiry_date__lte=target_date + timedelta(days=1)
+            )
     
     # 고객등급 필터
     grade_filter = request.GET.get('grade', '')
