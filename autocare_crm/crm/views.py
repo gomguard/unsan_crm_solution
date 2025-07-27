@@ -841,8 +841,31 @@ def upload_data(request):
                     """날짜 파싱"""
                     if pd.isna(date_value) or not date_value:
                         return None
+                    
+                    # 문자열인 경우
+                    if isinstance(date_value, str):
+                        try:
+                            # 'YYYY-MM-DD' 형식 파싱
+                            return datetime.strptime(date_value.strip(), '%Y-%m-%d').date()
+                        except ValueError:
+                            # 다른 형식들 시도
+                            date_formats = [
+                                '%Y/%m/%d',
+                                '%Y.%m.%d',
+                                '%d-%m-%Y',
+                                '%d/%m/%Y',
+                                '%Y%m%d',
+                            ]
+                            for fmt in date_formats:
+                                try:
+                                    return datetime.strptime(date_value.strip(), fmt).date()
+                                except ValueError:
+                                    continue
+                    
+                    # datetime 객체인 경우
                     if hasattr(date_value, 'date'):
                         return date_value.date()
+                    
                     return None
                 
                 def map_customer_grade(grade_str):
