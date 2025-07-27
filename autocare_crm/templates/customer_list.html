@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+
+{% block title %}고객관리 - Unsan CRM solution{% endblock %}
+
+{% block content %}
+<!-- 페이지 헤더 -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+            <i class="bi bi-people-fill mr-2"></i>
+            고객 관리
+            <span class="ml-2 text-sm font-normal text-gray-500">(총 {{ customers.paginator.count|default:0 }}명)</span>
+        </h1>
+    </div>
+    <div class="mt-4 sm:mt-0">
+        <a href="{% url 'upload_data' %}" class="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+            <i class="bi bi-upload mr-2"></i>
+            데이터 업로드
+        </a>
+    </div>
+</div>
+
+<!-- 검색 및 필터 -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <!-- 검색창 -->
+        <div class="md:col-span-2">
+            <div class="relative">
+                <input type="text" 
+                       name="search" 
+                       value="{{ search_query }}" 
+                       placeholder="이름, 전화번호, 차량번호 검색..."
+                       class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <i class="bi bi-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+        </div>
+        
+        <!-- 상태 필터 -->
+        <div>
+            <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">전체 상태</option>
+                {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <!-- 우선순위 필터 -->
+        <div>
+            <select name="priority" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">전체 우선순위</option>
+                <option value="overdue" {% if request.GET.priority == 'overdue' %}selected{% endif %}>검사만료</option>
+                <option value="due_soon" {% if request.GET.priority == 'due_soon' %}selected{% endif %}>3개월내 만료</option>
+                <option value="high" {% if request.GET.priority == 'high' %}selected{% endif %}>높음</option>
+            </select>
+        </div>
+        
+        <!-- 해피콜 필터 -->
+        <div>
+            <select name="happy_call" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">해피콜 전체</option>
+                <option value="3month" {% if happy_call_filter == '3month' %}selected{% endif %}>3개월콜</option>
+                <option value="6month" {% if happy_call_filter == '6month' %}selected{% endif %}>6개월콜</option>
+                <option value="12month" {% if happy_call_filter == '12month' %}selected{% endif %}>12개월콜</option>
+                <option value="18month" {% if happy_call_filter == '18month' %}selected{% endif %}>18개월콜</option>
+            </select>
+        </div>
+        
+        <!-- 검색 버튼 -->
+        <div>
+            <button type="submit" class="w-full px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+                <i class="bi bi-search mr-1"></i>
+                검색
+            </button>
+        </div>
+    </form>
+    
+    <!-- 빠른 필터 -->
+    <div class="mt-4 flex items-center space-x-2">
+        <span class="text-sm text-gray-500">빠른 필터:</span>
+        <div class="flex flex-wrap gap-2">
+            <label class="inline-flex items-center">
+                <input type="checkbox" name="inspection_due" value="true" 
+                       {% if inspection_due == 'true' %}checked{% endif %}
+                       class="rounded border-gray-300 text-primary focus:ring-primary">
+                <span class="ml-2 text-sm text-gray-700">검사 임박</span>
+            </label>
+        </div>
+    </div>
+</div>
+
+<!-- 현재 필터 표시 -->
+{% if happy_call_filter %}
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center">
+            <i class="bi bi-funnel-fill text-blue-600 mr-2"></i>
+            <span class="text-sm text-blue-800">
+                현재 필터: 
+                {% if happy_call_filter == '3month' %}3개월 해피콜 대상
+                {% elif happy_call_filter == '6month' %}6개월 해피콜 대상
+                {% elif happy_call_filter == '12month' %}12개월 해피콜 대상
+                {% elif happy_call_filter == '18month' %}18개월 해피콜 대상
+                {% endif %}
+                고객 ({{ customers.paginator.count }}명)
+            </span>
+        </div>
+        <a href="{% url 'customer_list' %}" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+            <i class="bi bi-x-lg mr-1"></i>필터 해제
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- 고객 목록 테이블 -->
+<div class="bg-white rounded-lg shadow-sm overflow-hidden">
+    {% if customers %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객정보</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">차량정보</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">검사일</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">등급/태그</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">최근통화</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">액션</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for customer in customers %}
+                <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="location.href='{% url 'customer_detail' customer.pk %}'">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10">
+                                <div class="h-10 w-10 rounded-full flex items-center justify-center
+                                    {% if customer.customer_grade == 'vip' %}bg-yellow-100{% elif customer.is_frequent_visitor %}bg-red-100{% elif customer.is_inspection_overdue %}bg-red-100{% elif customer.is_inspection_due_soon %}bg-orange-100{% else %}bg-blue-100{% endif %}">
+                                    {% if customer.customer_grade == 'vip' %}
+                                        <i class="bi bi-star-fill text-yellow-600"></i>
+                                    {% elif customer.is_frequent_visitor %}
+                                        <i class="bi bi-heart-fill text-red-600"></i>
+                                    {% elif customer.is_inspection_overdue %}
+                                        <i class="bi bi-exclamation-triangle-fill text-red-600"></i>
+                                    {% elif customer.is_inspection_due_soon %}
+                                        <i class="bi bi-clock-fill text-orange-600"></i>
+                                    {% else %}
+                                        <i class="bi bi-person-circle text-blue-600"></i>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900">{{ customer.name }}</div>
+                                <div class="text-sm text-gray-500">{{ customer.phone }}</div>
+                                <div class="text-xs text-gray-400">ID: {{ customer.id }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">{{ customer.vehicle_number }}</div>
+                        {% if customer.vehicle_name %}
+                            <div class="text-sm text-gray-500">{{ customer.vehicle_name }}</div>
+                        {% endif %}
+                        {% if customer.vehicle_model %}
+                            <div class="text-xs text-gray-400">{{ customer.vehicle_model }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if customer.inspection_expiry_date %}
+                            <div class="text-sm {% if customer.inspection_status == 'overdue' %}text-red-600 font-semibold{% elif customer.inspection_status == 'due_soon' %}text-orange-600 font-semibold{% else %}text-green-600{% endif %}">
+                                {{ customer.inspection_expiry_date }}
+                            </div>
+                            <div class="text-xs text-gray-500">
+                                {% if customer.inspection_status == 'overdue' %}만료됨
+                                {% elif customer.inspection_status == 'due_soon' %}임박
+                                {% else %}유효{% endif %}
+                            </div>
+                        {% else %}
+                            <span class="text-sm text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if customer.status == 'pending' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">미접촉</span>
+                        {% elif customer.status == 'contacted' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">접촉완료</span>
+                        {% elif customer.status == 'interested' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">관심있음</span>
+                        {% elif customer.status == 'not_interested' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">관심없음</span>
+                        {% elif customer.status == 'callback' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">재통화예정</span>
+                        {% elif customer.status == 'converted' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">계약성사</span>
+                        {% elif customer.status == 'do_not_call' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">통화거부</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex flex-col gap-1">
+                            {% if customer.customer_grade %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-800 text-white">
+                                    {{ customer.get_customer_grade_display }}
+                                </span>
+                            {% endif %}
+                            {% if customer.is_frequent_visitor %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">단골</span>
+                            {% endif %}
+                            {% if customer.visit_count > 0 %}
+                                <span class="text-xs text-gray-500">{{ customer.visit_count }}회 방문</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {% with customer.call_records.first as last_call %}
+                            {% if last_call %}
+                                <div>
+                                    <div class="text-xs">{{ last_call.call_date|date:"m/d H:i" }}</div>
+                                    <div class="text-xs text-gray-400">{{ last_call.caller.username }}</div>
+                                    {% if last_call.call_date.date == today %}
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 mt-1">
+                                            <i class="bi bi-check-circle mr-1"></i>오늘
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="text-gray-400">-</span>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onclick="event.stopPropagation();">
+                        <a href="{% url 'customer_detail' customer.pk %}" 
+                           class="inline-flex items-center px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-hover transition-colors">
+                            <i class="bi bi-telephone mr-1"></i>
+                            통화/기록
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- 페이지네이션 -->
+    {% if customers.has_other_pages %}
+    <div class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+        <div class="flex items-center justify-between">
+            <div class="flex-1 flex justify-between sm:hidden">
+                {% if customers.has_previous %}
+                    <a href="?page={{ customers.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        이전
+                    </a>
+                {% endif %}
+                {% if customers.has_next %}
+                    <a href="?page={{ customers.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        다음
+                    </a>
+                {% endif %}
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-center">
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    {% if customers.has_previous %}
+                        <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <i class="bi bi-chevron-double-left"></i>
+                        </a>
+                        <a href="?page={{ customers.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                        {{ customers.number }} / {{ customers.paginator.num_pages }}
+                    </span>
+                    
+                    {% if customers.has_next %}
+                        <a href="?page={{ customers.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                        <a href="?page={{ customers.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <i class="bi bi-chevron-double-right"></i>
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <!-- 빈 상태 -->
+    <div class="text-center py-12">
+        <i class="bi bi-inbox text-6xl text-gray-300"></i>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">고객이 없습니다</h3>
+        <p class="mt-1 text-sm text-gray-500">검색 조건을 변경하거나 새로운 고객 데이터를 업로드해보세요.</p>
+        <div class="mt-6">
+            <a href="{% url 'upload_data' %}" class="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-hover transition-colors">
+                <i class="bi bi-upload mr-2"></i>
+                데이터 업로드
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 검사 임박 고객 하이라이트
+    const urgentRows = document.querySelectorAll('tr:has(.bi-exclamation-triangle-fill)');
+    urgentRows.forEach(row => {
+        row.classList.add('bg-red-50');
+    });
+    
+    const warningRows = document.querySelectorAll('tr:has(.bi-clock-fill)');
+    warningRows.forEach(row => {
+        row.classList.add('bg-orange-50');
+    });
+    
+    // 체크박스 변경 시 자동 검색
+    document.querySelector('input[type="checkbox"]').addEventListener('change', function() {
+        this.closest('form').submit();
+    });
+});
+</script>
+{% endblock %}

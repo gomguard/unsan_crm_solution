@@ -1,0 +1,581 @@
+{% extends 'base.html' %}
+
+{% block title %}대시보드 - Unsan CRM solution{% endblock %}
+
+{% block content %}
+<!-- 헤더 섹션 -->
+<div class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">대시보드</h1>
+    <p class="text-gray-600 mt-2">우선순위 중심 관리</p>
+</div>
+
+<!-- 긴급 알림 -->
+{% if pending_follow_ups > 0 or overdue_customers > 0 %}
+<div class="space-y-3 mb-6">
+    {% if pending_follow_ups > 0 %}
+    <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-center justify-between">
+        <div class="flex items-center">
+            <i class="bi bi-exclamation-triangle-fill text-orange-600 text-xl mr-3"></i>
+            <span class="text-sm text-gray-800">
+                <strong>알림!</strong> 미완료 후속조치가 <strong>{{ pending_follow_ups }}건</strong> 있습니다.
+            </span>
+        </div>
+        <a href="{% url 'call_records' %}?filter=pending_follow_up" class="text-sm font-medium text-orange-600 hover:text-orange-800">
+            처리하기 →
+        </a>
+    </div>
+    {% endif %}
+    
+    {% if overdue_customers > 0 %}
+    <div class="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+        <div class="flex items-center">
+            <i class="bi bi-exclamation-circle-fill text-red-600 text-xl mr-3"></i>
+            <span class="text-sm text-gray-800">
+                <strong>긴급!</strong> 검사가 만료된 고객이 <strong>{{ overdue_customers }}명</strong> 있습니다.
+            </span>
+        </div>
+        <a href="{% url 'customer_list' %}?priority=overdue" class="text-sm font-medium text-red-600 hover:text-red-800">
+            즉시 연락 →
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- 주요 지표 - 후속조치 현황 -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-medium text-gray-900 mb-4 text-center">후속조치 현황</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="{% url 'call_records' %}?filter=pending_follow_up" class="text-center hover:bg-gray-50 p-3 rounded-lg transition-colors cursor-pointer">
+            <div class="text-3xl font-bold text-orange-600">{{ followup_pending|default:0 }}</div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider mt-1">미완료 후속조치</div>
+        </a>
+        <a href="{% url 'call_records' %}?filter=today_follow_up" class="text-center hover:bg-gray-50 p-3 rounded-lg transition-colors cursor-pointer">
+            <div class="text-3xl font-bold text-blue-600">{{ followup_due_today|default:0 }}</div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider mt-1">오늘 예정</div>
+        </a>
+        <a href="{% url 'call_records' %}?filter=overdue_follow_up" class="text-center hover:bg-gray-50 p-3 rounded-lg transition-colors cursor-pointer">
+            <div class="text-3xl font-bold text-red-600">{{ followup_overdue|default:0 }}</div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider mt-1">기한 초과</div>
+        </a>
+        <div class="text-center hover:bg-gray-50 p-3 rounded-lg transition-colors cursor-pointer">
+            <div class="text-3xl font-bold text-green-600">{{ followup_completed_today|default:0 }}</div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider mt-1">오늘 완료</div>
+        </div>
+    </div>
+    
+    <!-- 진행률 표시 -->
+    <div class="mt-6 pt-6 border-t border-gray-200">
+        <div class="text-center mb-3">
+            <div class="text-2xl font-bold text-purple-600">{{ followup_completion_rate|default:0 }}%</div>
+            <div class="text-xs text-gray-500">전체 후속조치 완료율</div>
+        </div>
+    </div>
+</div>
+
+<!-- 오늘의 통화 진행 현황 (개선된 버전) -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-medium text-gray-900 mb-6 text-center">오늘의 업무 진행 현황</h2>
+    
+    <!-- 카테고리별 진행 현황 - 더 크게 표시 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+        <div class="text-center">
+            <div class="bg-gradient-to-br from-red-50 to-pink-50 p-4 rounded-xl">
+                <div class="text-sm font-medium text-gray-700 mb-2">해피콜</div>
+                <div class="flex items-baseline justify-center">
+                    <span class="text-3xl font-bold text-green-600">{{ happy_call_3month.completed|add:happy_call_6month.completed|add:happy_call_12month.completed|add:happy_call_18month.completed }}</span>
+                    <span class="text-2xl text-gray-400 mx-1">/</span>
+                    <span class="text-3xl font-bold text-gray-900">{{ happy_call_3month.total|add:happy_call_6month.total|add:happy_call_12month.total|add:happy_call_18month.total }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div class="bg-gradient-to-br from-orange-50 to-yellow-50 p-4 rounded-xl">
+                <div class="text-sm font-medium text-gray-700 mb-2">검사만료</div>
+                <div class="flex items-baseline justify-center">
+                    <span class="text-3xl font-bold text-green-600">{{ overdue_customers.completed }}</span>
+                    <span class="text-2xl text-gray-400 mx-1">/</span>
+                    <span class="text-3xl font-bold text-gray-900">{{ overdue_customers.total }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div class="bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-xl">
+                <div class="text-sm font-medium text-gray-700 mb-2">재방문</div>
+                <div class="flex items-baseline justify-center">
+                    <span class="text-3xl font-bold text-green-600">{{ returning_customers.completed }}</span>
+                    <span class="text-2xl text-gray-400 mx-1">/</span>
+                    <span class="text-3xl font-bold text-gray-900">{{ returning_customers.total }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div class="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-xl">
+                <div class="text-sm font-medium text-gray-700 mb-2">오늘 성약</div>
+                <div class="text-3xl font-bold text-blue-600">{{ today_conversions|default:0 }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 통화 통계 - 더 크게 표시 -->
+    <div class="grid grid-cols-3 gap-4 text-center pt-6 border-t border-gray-200">
+        <div class="p-3">
+            <div class="text-3xl font-bold text-gray-900">{{ today_total_calls|default:0 }}</div>
+            <div class="text-sm text-gray-600 mt-1">총 통화 시도</div>
+        </div>
+        <div class="p-3">
+            <div class="text-3xl font-bold text-green-600">{{ today_connected_calls|default:0 }}</div>
+            <div class="text-sm text-gray-600 mt-1">통화 성공</div>
+        </div>
+        <div class="p-3">
+            <div class="text-3xl font-bold text-purple-600">{{ today_conversion_rate|default:0 }}%</div>
+            <div class="text-sm text-gray-600 mt-1">성약률</div>
+        </div>
+    </div>
+</div>
+
+<!-- 우선순위 업무 -->
+<div class="mb-8">
+    <h2 class="text-lg font-medium text-gray-900 mb-4 text-center">우선순위 업무</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- 3개월콜 -->
+        <a href="{% url 'customer_list' %}?happy_call=3month" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-red-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-lg mb-3">
+                    <i class="bi bi-telephone-fill text-red-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">3개월콜</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if happy_call_3month.remaining == 0 and happy_call_3month.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ happy_call_3month.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ happy_call_3month.total }}명 중
+                </div>
+                {% if happy_call_3month.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ happy_call_3month.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-red-500 transition-all duration-300" style="width: {{ happy_call_3month.progress }}%"></div>
+            </div>
+        </a>
+
+        <!-- 6개월콜 -->
+        <a href="{% url 'customer_list' %}?happy_call=6month" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-orange-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-orange-100 rounded-lg mb-3">
+                    <i class="bi bi-tools text-orange-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">6개월콜</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if happy_call_6month.remaining == 0 and happy_call_6month.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ happy_call_6month.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ happy_call_6month.total }}명 중
+                </div>
+                {% if happy_call_6month.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ happy_call_6month.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-orange-500 transition-all duration-300" style="width: {{ happy_call_6month.progress }}%"></div>
+            </div>
+        </a>
+
+        <!-- 12개월콜 -->
+        <a href="{% url 'customer_list' %}?happy_call=12month" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-blue-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg mb-3">
+                    <i class="bi bi-gear-fill text-blue-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">12개월콜</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if happy_call_12month.remaining == 0 and happy_call_12month.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ happy_call_12month.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ happy_call_12month.total }}명 중
+                </div>
+                {% if happy_call_12month.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ happy_call_12month.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-blue-500 transition-all duration-300" style="width: {{ happy_call_12month.progress }}%"></div>
+            </div>
+        </a>
+
+        <!-- 18개월콜 -->
+        <a href="{% url 'customer_list' %}?happy_call=18month" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-green-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-lg mb-3">
+                    <i class="bi bi-clipboard-check-fill text-green-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">18개월콜</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if happy_call_18month.remaining == 0 and happy_call_18month.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ happy_call_18month.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ happy_call_18month.total }}명 중
+                </div>
+                {% if happy_call_18month.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ happy_call_18month.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-green-500 transition-all duration-300" style="width: {{ happy_call_18month.progress }}%"></div>
+            </div>
+        </a>
+
+        <!-- 1회차이탈 (단순 표시) -->
+        <a href="{% url 'customer_list' %}?status=first_time_lost" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-gray-500 card-hover">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-gray-100 rounded-lg mb-3">
+                    <i class="bi bi-person-x-fill text-gray-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">1회차이탈</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">{{ first_time_lost|default:0 }}</div>
+                <div class="text-xs text-gray-500">&nbsp;</div>
+            </div>
+        </a>
+
+        <!-- 장기이탈/폐차 (단순 표시) -->
+        <a href="{% url 'customer_list' %}?status=lost" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-gray-500 card-hover">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-gray-100 rounded-lg mb-3">
+                    <i class="bi bi-person-dash-fill text-gray-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">장기이탈/폐차</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">{{ long_term_lost|default:0 }}</div>
+                <div class="text-xs text-gray-500">&nbsp;</div>
+            </div>
+        </a>
+
+        <!-- 검사만료 -->
+        <a href="{% url 'customer_list' %}?priority=overdue" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-red-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-lg mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-red-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">검사만료</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if overdue_customers.remaining == 0 and overdue_customers.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ overdue_customers.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ overdue_customers.total }}명 중
+                </div>
+                {% if overdue_customers.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ overdue_customers.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-red-500 transition-all duration-300" style="width: {{ overdue_customers.progress }}%"></div>
+            </div>
+        </a>
+
+        <!-- 재방문 고객 -->
+        <a href="{% url 'customer_list' %}?visit_count=2" class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow border-t-4 border-purple-500 card-hover relative overflow-hidden group">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-lg mb-3">
+                    <i class="bi bi-arrow-repeat text-purple-600 text-xl"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-700">재방문 고객</div>
+                <div class="text-3xl font-bold text-gray-900 my-1">
+                    {% if returning_customers.remaining == 0 and returning_customers.total > 0 %}
+                        <i class="bi bi-check-circle-fill text-green-600"></i>
+                    {% else %}
+                        {{ returning_customers.remaining }}
+                    {% endif %}
+                </div>
+                <div class="text-xs text-gray-500">
+                    총 {{ returning_customers.total }}명 중
+                </div>
+                {% if returning_customers.completed > 0 %}
+                <div class="text-xs text-green-600 mt-1">
+                    <i class="bi bi-check-circle mr-1"></i>오늘 {{ returning_customers.completed }}명 완료
+                </div>
+                {% endif %}
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                <div class="h-full bg-purple-500 transition-all duration-300" style="width: {{ returning_customers.progress }}%"></div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- 주요 지표 -->
+<div class="mb-8">
+    <h2 class="text-lg font-medium text-gray-900 mb-4 text-center">주요 지표</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ total_customers|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">전체 고객</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ pending_customers|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">미접촉 고객</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ interested_customers|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">관심 고객</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ converted_customers|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">성약 고객</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ due_soon_customers|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">3개월내 만료</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ frequent_visitors|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">단골 고객</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ today_overdue_calls|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">오늘 만료고객 통화</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900">{{ today_vip_calls|default:0 }}</div>
+                <div class="text-sm text-gray-600 mt-1">오늘 VIP 통화</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 최근 통화 기록 -->
+{% if recent_calls %}
+<div class="bg-white rounded-lg shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-medium text-gray-900">최근 통화 기록</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시간</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상담원</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">결과</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관심분야</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for call in recent_calls %}
+                <tr class="hover:bg-gray-50 cursor-pointer" onclick="location.href='{% url 'customer_detail' call.customer.pk %}'">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ call.call_date|date:"H:i" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">{{ call.customer.name }}</div>
+                        <div class="text-xs text-gray-500">{{ call.customer.phone }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ call.caller.username }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if call.call_result == 'connected' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">통화성공</span>
+                        {% elif call.call_result == 'no_answer' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">부재중</span>
+                        {% else %}
+                            <span class="text-sm text-gray-900">{{ call.get_call_result_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {% if call.interest_type %}
+                            {{ call.get_interest_type_display }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if call.is_converted %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">성약</span>
+                        {% elif call.requires_follow_up and not call.follow_up_completed %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">후속조치필요</span>
+                        {% elif call.follow_up_date %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">재통화예정</span>
+                        {% else %}
+                            <span class="text-sm text-gray-500">완료</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="px-6 py-4 border-t border-gray-200 text-center">
+        <a href="{% url 'call_records' %}" class="text-sm font-medium text-primary hover:text-primary-hover">
+            전체 통화 기록 보기 →
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- 빠른 액션 버튼 -->
+<div class="mt-8 text-center">
+    <a href="{% url 'customer_list' %}" class="inline-flex items-center px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover transition-colors mr-3">
+        <i class="bi bi-telephone mr-2"></i>통화 시작
+    </a>
+    <button type="button" onclick="location.reload();" class="inline-flex items-center px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+        <i class="bi bi-arrow-clockwise mr-2"></i>새로고침
+    </button>
+</div>
+
+<!-- 팀장 전용: 상담원별 성과 -->
+{% if agent_stats %}
+<div class="mt-8 bg-white rounded-lg shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-medium text-gray-900">상담원별 오늘 성과</h2>
+    </div>
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {% for agent in agent_stats %}
+            <div class="border border-gray-200 rounded-lg p-4">
+                <h3 class="font-medium text-gray-900 mb-3">{{ agent.caller__username }}</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">총 통화:</span>
+                        <span class="font-medium">{{ agent.total_calls }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">통화 성공:</span>
+                        <span class="font-medium">{{ agent.connected_calls }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">계약 성사:</span>
+                        <span class="font-medium text-green-600">{{ agent.converted_calls }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 자동 새로고침 기능
+let refreshInterval;
+
+function startAutoRefresh() {
+    refreshInterval = setInterval(() => {
+        location.reload();
+    }, 5 * 60 * 1000); // 5분
+}
+
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+}
+
+// 자동 새로고침 체크박스 이벤트
+document.getElementById('autoRefresh').addEventListener('change', function() {
+    if (this.checked) {
+        startAutoRefresh();
+        showToast('자동 새로고침이 활성화되었습니다.', 'success');
+    } else {
+        stopAutoRefresh();
+        showToast('자동 새로고침이 비활성화되었습니다.', 'info');
+    }
+});
+
+// 페이지 로드 시 자동 새로고침 시작
+if (document.getElementById('autoRefresh').checked) {
+    startAutoRefresh();
+}
+
+// 진행률 애니메이션
+document.addEventListener('DOMContentLoaded', function() {
+    // 진행률 바 애니메이션
+    const progressBars = document.querySelectorAll('.bg-red-500, .bg-orange-500, .bg-blue-500, .bg-green-500, .bg-purple-500');
+    progressBars.forEach(bar => {
+        const width = bar.style.width;
+        bar.style.width = '0%';
+        setTimeout(() => {
+            bar.style.width = width;
+        }, 100);
+    });
+    
+    // 완료된 항목에 체크 애니메이션
+    const completedItems = document.querySelectorAll('.text-green-600');
+    completedItems.forEach((item, index) => {
+        if (item.textContent.includes('완료')) {
+            item.style.opacity = '0';
+            item.style.transform = 'translateY(10px)';
+            setTimeout(() => {
+                item.style.transition = 'all 0.3s ease';
+                item.style.opacity = '1';
+                item.style.transform = 'translateY(0)';
+            }, 100 * index);
+        }
+    });
+});
+
+// 카드 클릭 시 효과
+document.querySelectorAll('.card-hover').forEach(card => {
+    card.addEventListener('click', function(e) {
+        e.preventDefault();
+        this.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+            window.location.href = this.href;
+        }, 100);
+    });
+});
+</script>
+{% endblock %}

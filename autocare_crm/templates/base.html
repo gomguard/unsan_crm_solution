@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Unsan CRM solution{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Bootstrap Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2c5aa0',
+                        'primary-hover': '#1e3a6f',
+                        'primary-light': '#e7f1ff',
+                        secondary: '#6c757d',
+                        success: '#16a34a',
+                        danger: '#dc2626',
+                        warning: '#ea580c',
+                        info: '#2563eb',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* 공통 스타일 */
+        .card-shadow { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+        .card-hover { transition: all 0.2s; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+        
+        /* 스크롤바 스타일 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 애니메이션 */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="h-screen flex overflow-hidden bg-gray-50">
+    <!-- 사이드바 -->
+    <div class="hidden md:flex md:flex-shrink-0">
+        <div class="flex flex-col w-64">
+            <div class="flex flex-col h-0 flex-1 bg-gray-800">
+                <div class="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
+                    <!-- 로고 -->
+                    <div class="flex items-center flex-shrink-0 px-4">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white font-bold text-xl">
+                            운
+                        </div>
+                        <span class="ml-3 text-xl font-semibold text-white">운산자동차 CRM</span>
+                    </div>
+                    
+                    <!-- 네비게이션 -->
+                    <nav class="mt-5 flex-1 px-2 space-y-1">
+                        <a href="{% url 'dashboard' %}" 
+                           class="{% if request.resolver_match.url_name == 'dashboard' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-speedometer2 mr-3 text-lg"></i>
+                            대시보드
+                        </a>
+
+                        <a href="{% url 'customer_list' %}"
+                           class="{% if request.resolver_match.url_name == 'customer_list' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-people mr-3 text-lg"></i>
+                            고객관리
+                        </a>
+
+                        <a href="{% url 'call_records' %}"
+                           class="{% if request.resolver_match.url_name == 'call_records' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-telephone mr-3 text-lg"></i>
+                            통화기록
+                        </a>
+
+                        <a href="{% url 'upload_data' %}"
+                           class="{% if request.resolver_match.url_name == 'upload_data' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-upload mr-3 text-lg"></i>
+                            데이터업로드
+                        </a>
+                    </nav>
+                    
+                    <!-- 통계 -->
+                    <div class="mt-6 px-3">
+                        <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">빠른 통계</div>
+                        <div class="mt-3 space-y-2">
+                            <div class="bg-gray-700 rounded-lg px-3 py-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-300">오늘 통화</span>
+                                    <span class="text-sm font-semibold text-white" id="sidebar-today-calls">{{ sidebar_today_calls|default:0 }}</span>
+                                </div>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg px-3 py-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-300">미완료 후속조치</span>
+                                    <span class="text-sm font-semibold text-orange-400" id="sidebar-pending-followups">{{ sidebar_pending_followups|default:0 }}</span>
+                                </div>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg px-3 py-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-300">검사만료 고객</span>
+                                    <span class="text-sm font-semibold text-red-400" id="sidebar-overdue-customers">{{ sidebar_overdue_customers|default:0 }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 하단 사용자 정보 -->
+                <div class="flex-shrink-0 bg-gray-700 p-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white text-sm font-semibold">
+                                {{ user.username|first|upper }}
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-white">{{ user.username }}</p>
+                                <p class="text-xs text-gray-400">
+                                    {% if user.is_staff %}관리자{% else %}상담원{% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{% url 'logout' %}" class="text-gray-400 hover:text-white transition-colors">
+                            <i class="bi bi-box-arrow-right text-xl"></i>
+                        </a>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-600">
+                        <p class="text-xs text-gray-400">
+                            <i class="bi bi-clock mr-1"></i>
+                            로그인: <span id="login-time">방금 전</span>
+                        </p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            <i class="bi bi-calendar mr-1"></i>
+                            {{ today|date:"Y년 m월 d일" }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <div class="flex flex-col w-0 flex-1 overflow-hidden">
+        <!-- 상단 헤더 -->
+        <div class="relative z-10 flex-shrink-0 flex h-16 bg-white shadow-sm">
+            <!-- 모바일 메뉴 버튼 -->
+            <button type="button" class="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary md:hidden" onclick="toggleMobileSidebar()">
+                <span class="sr-only">메뉴 열기</span>
+                <i class="bi bi-list text-2xl"></i>
+            </button>
+
+            <div class="flex-1 px-4 flex justify-between">
+                <div class="flex-1 flex">
+                    <!-- 검색창 -->
+                    <form class="w-full flex md:ml-0" action="{% url 'customer_list' %}" method="GET">
+                        <label for="search-field" class="sr-only">검색</label>
+                        <div class="relative w-full text-gray-400 focus-within:text-gray-600">
+                            <div class="absolute inset-y-0 left-0 flex items-center pointer-events-none">
+                                <i class="bi bi-search"></i>
+                            </div>
+                            <input id="search-field" 
+                                class="block w-full h-full pl-8 pr-3 py-2 border-transparent text-gray-900 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-0 focus:border-transparent sm:text-sm" 
+                                placeholder="고객명, 전화번호, 차량번호 검색..." 
+                                type="search" 
+                                name="search"
+                                value="{{ request.GET.search }}">
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="ml-4 flex items-center md:ml-6">
+                    <!-- 알림 버튼 -->
+                    <button type="button" class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                        <span class="sr-only">알림 보기</span>
+                        <i class="bi bi-bell text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메인 컨텐츠 -->
+        <main class="flex-1 relative {% block main_class %}overflow-y-auto{% endblock %} focus:outline-none">
+            {% block main_wrapper %}
+            <div class="py-6">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+                    <!-- 메시지 표시 -->
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="mb-4 rounded-lg {% if message.tags == 'error' %}bg-red-50 border border-red-200{% elif message.tags == 'success' %}bg-green-50 border border-green-200{% else %}bg-blue-50 border border-blue-200{% endif %} p-4 animate-fade-in">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    {% if message.tags == 'error' %}
+                                        <i class="bi bi-x-circle-fill text-red-400"></i>
+                                    {% elif message.tags == 'success' %}
+                                        <i class="bi bi-check-circle-fill text-green-400"></i>
+                                    {% else %}
+                                        <i class="bi bi-info-circle-fill text-blue-400"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm">{{ message }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <!-- 페이지 컨텐츠 -->
+                    {% block content %}{% endblock %}
+                </div>
+            </div>
+            {% endblock %}
+        </main>
+    </div>
+
+    <!-- 공통 JavaScript -->
+    <script>
+        // 로그인 시간 업데이트
+        const loginTime = new Date();
+        
+        function updateLoginTime() {
+            const now = new Date();
+            const diff = Math.floor((now - loginTime) / 1000);
+            
+            let timeText = '';
+            if (diff < 60) {
+                timeText = '방금 전';
+            } else if (diff < 3600) {
+                timeText = Math.floor(diff / 60) + '분 전';
+            } else if (diff < 86400) {
+                timeText = Math.floor(diff / 3600) + '시간 전';
+            } else {
+                timeText = loginTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            const loginTimeElement = document.getElementById('login-time');
+            if (loginTimeElement) {
+                loginTimeElement.textContent = timeText;
+            }
+        }
+        
+        updateLoginTime();
+        setInterval(updateLoginTime, 60000);
+        
+        // 메시지 자동 숨기기
+        setTimeout(function() {
+            const messages = document.querySelectorAll('[class*="border-"]');
+            messages.forEach(function(message) {
+                if (message.classList.contains('border-red-200') || 
+                    message.classList.contains('border-green-200') || 
+                    message.classList.contains('border-blue-200')) {
+                    message.style.transition = 'opacity 0.5s ease';
+                    message.style.opacity = '0';
+                    setTimeout(() => message.remove(), 500);
+                }
+            });
+        }, 5000);
+        
+        // 토스트 알림 함수 (공통)
+        function showToast(message, type = 'success') {
+            const toastHtml = `
+                <div class="fixed top-4 right-4 z-50 animate-fade-in">
+                    <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3 min-w-[300px]">
+                        <div class="flex-shrink-0">
+                            ${type === 'success' ? 
+                                '<i class="bi bi-check-circle-fill text-green-500 text-xl"></i>' : 
+                                '<i class="bi bi-exclamation-triangle-fill text-red-500 text-xl"></i>'}
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-900">${message}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const toastElement = document.createElement('div');
+            toastElement.innerHTML = toastHtml;
+            document.body.appendChild(toastElement);
+            
+            setTimeout(() => {
+                toastElement.style.opacity = '0';
+                toastElement.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => toastElement.remove(), 500);
+            }, 3000);
+        }
+
+    // 모바일 사이드바 토글
+    function toggleMobileSidebar() {
+        const sidebar = document.querySelector('.md\\:flex.md\\:flex-shrink-0');
+        if (sidebar) {
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('fixed');
+            sidebar.classList.toggle('inset-0');
+            sidebar.classList.toggle('z-40');
+            
+            // 오버레이 추가/제거
+            let overlay = document.getElementById('sidebar-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'sidebar-overlay';
+                overlay.className = 'fixed inset-0 bg-gray-600 bg-opacity-75 z-30';
+                overlay.onclick = toggleMobileSidebar;
+                document.body.appendChild(overlay);
+            } else {
+                overlay.remove();
+            }
+        }
+    }
+
+    // 검색창 엔터키 처리
+    document.getElementById('search-field').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.form.submit();
+        }
+    });
+
+    // 검색창 실시간 검색 (선택사항)
+    let searchTimeout;
+    document.getElementById('search-field').addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        const searchValue = e.target.value;
+        
+        // 3글자 이상일 때만 자동 검색
+        if (searchValue.length >= 3) {
+            searchTimeout = setTimeout(() => {
+                // 실시간 검색을 원한다면 여기에 AJAX 호출 추가
+                // 또는 폼 자동 제출
+                // this.form.submit();
+            }, 500);
+        }
+    });
+    </script>
+
+    <!-- 사이드바 통계 자동 업데이트 추가 -->
+    <script>
+    // 사이드바 통계 자동 업데이트
+    function updateSidebarStats() {
+        fetch('{% url "sidebar_stats_api" %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('sidebar-today-calls').textContent = data.today_calls;
+                    document.getElementById('sidebar-pending-followups').textContent = data.pending_followups;
+                    document.getElementById('sidebar-overdue-customers').textContent = data.overdue_customers;
+                }
+            })
+            .catch(error => console.error('사이드바 통계 업데이트 오류:', error));
+    }
+    // 5분마다 사이드바 통계 업데이트
+    setInterval(updateSidebarStats, 5 * 60 * 1000);
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

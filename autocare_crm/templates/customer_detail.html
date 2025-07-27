@@ -1,0 +1,866 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ customer.name }} - 고객상세{% endblock %}
+
+{% block main_class %}overflow-hidden{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 모바일 대응 스타일 */
+@media (max-width: 1279px) {
+    .customer-info-section {
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 60px; /* 탭 바 높이 */
+        overflow-y: auto;
+    }
+    
+    .call-records-section {
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 60px; /* 탭 바 높이 */
+        overflow-y: auto;
+    }
+    
+    .mobile-container {
+        position: relative;
+        height: calc(100vh - 4rem); /* 헤더 높이 제외 */
+    }
+}
+</style>
+{% endblock %}
+
+{% block main_wrapper %}
+<div class="flex h-full mobile-container">
+    <!-- 왼쪽: 고객 정보 (고정) -->
+    <div id="customer-info-section" class="customer-info-section xl:block xl:w-96 xl:flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+        <div class="px-6 py-6">
+            <!-- 고객 기본 정보 헤더 -->
+            <div class="mb-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 h-16 w-16 mr-4">
+                        <div class="h-16 w-16 rounded-full flex items-center justify-center
+                            {% if customer.customer_grade == 'vip' %}bg-yellow-100{% elif customer.is_frequent_visitor %}bg-red-100{% elif customer.is_inspection_overdue %}bg-red-100{% elif customer.is_inspection_due_soon %}bg-orange-100{% else %}bg-blue-100{% endif %}">
+                            {% if customer.customer_grade == 'vip' %}
+                                <i class="bi bi-star-fill text-yellow-600 text-2xl"></i>
+                            {% elif customer.is_frequent_visitor %}
+                                <i class="bi bi-heart-fill text-red-600 text-2xl"></i>
+                            {% elif customer.is_inspection_overdue %}
+                                <i class="bi bi-exclamation-triangle-fill text-red-600 text-2xl"></i>
+                            {% elif customer.is_inspection_due_soon %}
+                                <i class="bi bi-clock-fill text-orange-600 text-2xl"></i>
+                            {% else %}
+                                <i class="bi bi-person-circle text-blue-600 text-2xl"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">{{ customer.name }}</h2>
+                        <p class="text-sm text-gray-500">고객ID: {{ customer.id }} | 방문 {{ customer.visit_count }}회</p>
+                    </div>
+                </div>
+                
+                <!-- 상태 배지 -->
+                <div class="flex flex-wrap gap-2 mt-4">
+                    {% if customer.status == 'pending' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">미접촉</span>
+                    {% elif customer.status == 'contacted' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">접촉완료</span>
+                    {% elif customer.status == 'interested' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">관심있음</span>
+                    {% elif customer.status == 'converted' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">계약성사</span>
+                    {% elif customer.status == 'not_interested' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">관심없음</span>
+                    {% elif customer.status == 'callback' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">재통화예정</span>
+                    {% elif customer.status == 'do_not_call' %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">통화거부</span>
+                    {% endif %}
+                    
+                    {% if customer.customer_grade %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-800 text-white">
+                            {{ customer.get_customer_grade_display }}
+                        </span>
+                    {% endif %}
+                    
+                    {% if customer.is_inspection_overdue %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">검사만료</span>
+                    {% elif customer.is_inspection_due_soon %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">검사임박</span>
+                    {% endif %}
+                    
+                    {% if customer.is_frequent_visitor %}
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">단골고객</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 연락처 정보 -->
+            <div class="mb-6">
+                <h3 class="text-sm font-medium text-gray-900 mb-3">
+                    <i class="bi bi-telephone mr-2"></i>연락처 정보
+                </h3>
+                <!-- 휴대전화 강조 표시 -->
+                <div class="mb-4 p-4 bg-blue-50 rounded-lg border-l-4 border-primary">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600 mb-1">휴대전화</p>
+                            <p class="text-2xl font-bold text-primary tracking-wider">{{ customer.phone }}</p>
+                        </div>
+                        <button type="button" onclick="copyPhone('{{ customer.phone }}')"
+                                class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                            <i class="bi bi-copy mr-2"></i>복사
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="space-y-3">
+                    {% if customer.landline %}
+                    <div>
+                        <p class="text-sm text-gray-600">전화번호</p>
+                        <p class="text-sm font-medium text-gray-900">{{ customer.landline }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.email %}
+                    <div>
+                        <p class="text-sm text-gray-600">이메일</p>
+                        <a href="mailto:{{ customer.email }}" class="text-sm font-medium text-primary hover:text-primary-hover">
+                            {{ customer.email }}
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.address %}
+                    <div>
+                        <p class="text-sm text-gray-600">주소</p>
+                        <p class="text-sm font-medium text-gray-900">
+                            {{ customer.address }}
+                            {% if customer.postal_code %}({{ customer.postal_code }}){% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.visit_count > 0 %}
+                    <div>
+                        <p class="text-sm text-gray-600">방문 횟수</p>
+                        <div class="flex items-center">
+                            <p class="text-sm font-medium text-gray-900">{{ customer.visit_count }}회</p>
+                            {% if customer.visit_count >= 10 %}
+                                <span class="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">우수고객</span>
+                            {% elif customer.visit_count >= 5 %}
+                                <span class="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">정기고객</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 차량 정보 -->
+            <div class="mb-6">
+                <h3 class="text-sm font-medium text-gray-900 mb-3">
+                    <i class="bi bi-car-front mr-2"></i>차량 정보
+                </h3>
+                <div class="space-y-3">
+                    <div>
+                        <p class="text-sm text-gray-600">차량번호</p>
+                        <p class="text-lg font-bold text-gray-900">{{ customer.vehicle_number }}</p>
+                    </div>
+                    
+                    {% if customer.vehicle_name %}
+                    <div>
+                        <p class="text-sm text-gray-600">차량명</p>
+                        <p class="text-sm font-medium text-gray-900">{{ customer.vehicle_name }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.vehicle_model %}
+                    <div>
+                        <p class="text-sm text-gray-600">모델명</p>
+                        <p class="text-sm font-medium text-gray-900">{{ customer.vehicle_model }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.vehicle_registration_date %}
+                    <div>
+                        <p class="text-sm text-gray-600">등록일</p>
+                        <p class="text-sm font-medium text-gray-900">{{ customer.vehicle_registration_date }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 검사 및 관리 정보 -->
+            <div class="mb-6">
+                <h3 class="text-sm font-medium text-gray-900 mb-3">
+                    <i class="bi bi-calendar-check mr-2"></i>검사 및 관리 정보
+                </h3>
+                <div class="space-y-3">
+                    {% if customer.inspection_expiry_date %}
+                    <div class="text-center p-4 rounded-lg border-2 
+                        {% if customer.inspection_status == 'overdue' %}border-red-300 bg-red-50
+                        {% elif customer.inspection_status == 'due_soon' %}border-orange-300 bg-orange-50
+                        {% else %}border-green-300 bg-green-50{% endif %}">
+                        <i class="bi bi-clipboard-check text-3xl mb-2
+                            {% if customer.inspection_status == 'overdue' %}text-red-600
+                            {% elif customer.inspection_status == 'due_soon' %}text-orange-600
+                            {% else %}text-green-600{% endif %}"></i>
+                        <p class="text-sm font-medium text-gray-900 mb-1">검사만료일</p>
+                        <p class="text-lg font-bold
+                            {% if customer.inspection_status == 'overdue' %}text-red-600
+                            {% elif customer.inspection_status == 'due_soon' %}text-orange-600
+                            {% else %}text-green-600{% endif %}">
+                            {{ customer.inspection_expiry_date }}
+                        </p>
+                        <p class="text-xs text-gray-600 mt-1">
+                            {% if customer.inspection_status == 'overdue' %}
+                                만료됨 - 긴급 연락 필요
+                            {% elif customer.inspection_status == 'due_soon' %}
+                                3개월 이내 만료
+                            {% else %}
+                                유효함
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if customer.insurance_expiry_date %}
+                    <div class="text-center p-3 rounded-lg border border-blue-300 bg-blue-50">
+                        <i class="bi bi-shield-check text-2xl text-blue-600 mb-1"></i>
+                        <p class="text-xs font-medium text-gray-900">보험만기일</p>
+                        <p class="text-sm font-bold text-blue-600">{{ customer.insurance_expiry_date }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 오른쪽: 통화 기록 (메인 컨텐츠) -->
+    <div id="call-records-section" class="call-records-section hidden xl:block xl:flex-1 bg-gray-50 overflow-y-auto">
+        <div class="px-6 py-6">
+            <!-- 헤더 -->
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-medium text-gray-900">
+                    <i class="bi bi-chat-dots mr-2"></i>통화 기록 ({{ call_records|length }}건)
+                </h2>
+                <a href="{% url 'customer_list' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                    <i class="bi bi-arrow-left mr-2"></i>
+                    목록으로
+                </a>
+            </div>
+
+            <!-- 새 통화 기록 입력 -->
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <form id="quickCallForm" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                    
+                    <!-- 빠른 입력 영역 -->
+                    <div class="flex gap-3 mb-3">
+                        <div class="flex-shrink-0">
+                            <i class="bi bi-person-circle text-3xl text-primary"></i>
+                        </div>
+                        <div class="flex-grow">
+                            <textarea name="notes" rows="3" 
+                                      placeholder="통화 내용을 입력하세요... (예: 검사 안내 완료, 타이어 교체 상담)"
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- 빠른 템플릿 버튼들 -->
+                    <div class="mb-3">
+                        <span class="text-sm text-gray-600 mr-2">빠른 입력:</span>
+                        <div class="inline-flex flex-wrap gap-2">
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="검사만료 안내 완료. 다음 주 방문 예정">
+                                검사안내
+                            </button>
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="정기점검 안내. 엔진오일 교체 필요">
+                                정기점검
+                            </button>
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="타이어 상태 확인 필요. 견적 안내 완료">
+                                타이어
+                            </button>
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="보험 상담 완료. 관심 없음">
+                                보험상담
+                            </button>
+                            <button type="button" class="template-btn inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    data-template="부재중. 추후 재통화 필요">
+                                부재중
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 간소화된 옵션 -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+                        <select name="call_result" required class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                            <option value="">통화결과</option>
+                            <option value="connected" selected>통화성공</option>
+                            <option value="no_answer">부재중</option>
+                            <option value="busy">통화중</option>
+                            <option value="wrong_number">잘못된번호</option>
+                            <option value="callback_requested">재통화요청</option>
+                        </select>
+                        
+                        <select name="interest_type" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                            <option value="">관심분야</option>
+                            <option value="insurance">보험</option>
+                            <option value="maintenance">소모품교체</option>
+                            <option value="financing">자동차금융</option>
+                            <option value="multiple">복수관심</option>
+                            <option value="none">관심없음</option>
+                        </select>
+                        
+                        <div class="flex items-center">
+                            <input type="checkbox" name="requires_follow_up" id="requiresFollowUp"
+                                   class="rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                            <label for="requiresFollowUp" class="text-sm font-medium text-gray-700">
+                                <i class="bi bi-exclamation-circle text-warning mr-1"></i>후속조치 필요
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="inline-flex items-center justify-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-hover transition-colors">
+                            <i class="bi bi-send mr-2"></i>등록
+                        </button>
+                    </div>
+                    
+                    <!-- 후속조치 예정일 (체크박스 선택시 표시) -->
+                    <div class="hidden" id="followUpDateSection">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <input type="date" name="follow_up_date" 
+                                   class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                                   placeholder="후속조치 예정일">
+                            <input type="text" name="follow_up_memo" 
+                                   class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                                   placeholder="후속조치 내용 (예: 견적서 발송)">
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 기존 통화 기록들 -->
+            {% if call_records %}
+            <div class="space-y-4">
+                {% for call in call_records %}
+                <div class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow" data-call-id="{{ call.id }}">
+                    <!-- 헤더 -->
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 mr-3">
+                                <div class="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                    <i class="bi bi-person-circle text-gray-600"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">
+                                    {{ call.caller.username }}
+                                    {% if call.caller == user %}
+                                        <span class="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">내 기록</span>
+                                    {% endif %}
+                                </p>
+                                <p class="text-xs text-gray-500">
+                                    <i class="bi bi-clock mr-1"></i>{{ call.call_date|date:"m월 d일 H:i" }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="toggleFollowUpForm({{ call.id }})"
+                                    class="text-gray-400 hover:text-gray-600 transition-colors" title="후속조치">
+                                <i class="bi bi-reply text-lg"></i>
+                            </button>
+                            {% if user.is_staff or call.caller == user %}
+                            <button type="button" onclick="deleteCallRecord({{ call.id }})"
+                                    class="text-gray-400 hover:text-red-600 transition-colors" title="삭제">
+                                <i class="bi bi-trash3 text-lg"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- 상태 배지 -->
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        {% if call.call_result == 'connected' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">통화성공</span>
+                        {% elif call.call_result == 'no_answer' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">부재중</span>
+                        {% elif call.call_result == 'busy' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">통화중</span>
+                        {% elif call.call_result == 'wrong_number' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">잘못된번호</span>
+                        {% elif call.call_result == 'callback_requested' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">재통화요청</span>
+                        {% endif %}
+                        
+                        {% if call.interest_type %}
+                            {% if call.interest_type == 'insurance' %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">보험</span>
+                            {% elif call.interest_type == 'maintenance' %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">소모품</span>
+                            {% elif call.interest_type == 'financing' %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">금융</span>
+                            {% elif call.interest_type == 'multiple' %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">복수관심</span>
+                            {% elif call.interest_type == 'none' %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">관심없음</span>
+                            {% endif %}
+                        {% endif %}
+                        
+                        {% if call.is_converted %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                <i class="bi bi-check-circle-fill mr-1"></i>계약성사
+                                {% if call.conversion_amount %}({{ call.conversion_amount|floatformat:0 }}원){% endif %}
+                            </span>
+                        {% endif %}
+                        
+                        {% if call.requires_follow_up and not call.follow_up_completed and not call.child_calls.exists %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                <i class="bi bi-exclamation-square-fill mr-1"></i>후속조치필요
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 상담 내용 -->
+                    {% if call.notes %}
+                    <div class="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
+                        {{ call.notes|linebreaksbr }}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 후속조치 입력 폼 (숨김 상태) -->
+                    <div class="mt-3 hidden" id="followup-form-{{ call.id }}">
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <form class="follow-up-submit-form" data-call-id="{{ call.id }}">
+                                {% csrf_token %}
+                                <h4 class="text-sm font-medium text-gray-900 mb-3">
+                                    <i class="bi bi-reply-fill mr-1"></i>후속조치 추가
+                                </h4>
+                                <div class="mb-3">
+                                    <textarea name="follow_up_notes" rows="2" required
+                                              placeholder="처리한 내용이나 추가 메모를 입력하세요..."
+                                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"></textarea>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <select name="follow_up_status" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                                        <option value="">상태 선택</option>
+                                        <option value="completed">처리완료</option>
+                                        <option value="pending">진행중</option>
+                                        <option value="scheduled">예약완료</option>
+                                        <option value="cancelled">취소</option>
+                                    </select>
+                                    <div class="flex justify-end gap-2">
+                                        <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-hover transition-colors">
+                                            <i class="bi bi-check mr-1"></i>저장
+                                        </button>
+                                        <button type="button" onclick="toggleFollowUpForm({{ call.id }})"
+                                                class="inline-flex items-center px-3 py-1.5 bg-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-400 transition-colors">
+                                            취소
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- 후속조치 기록들 (댓글 스타일) -->
+                    {% if call.child_calls.exists %}
+                    <div class="mt-3 pl-13">
+                        <p class="text-xs font-medium text-gray-500 mb-2">
+                            <i class="bi bi-arrow-return-right mr-1"></i>후속조치 기록
+                        </p>
+                        {% for child_call in call.child_calls.all %}
+                        <div class="mb-2 p-3 bg-gray-50 rounded-lg border-l-4 border-primary" data-call-id="{{ child_call.id }}">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center">
+                                    <i class="bi bi-person-circle text-gray-400 mr-2"></i>
+                                    <div>
+                                        <p class="text-xs font-medium text-gray-700">
+                                            {{ child_call.caller.username }}
+                                            {% if child_call.caller == user %}
+                                                <span class="ml-2 inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">내 기록</span>
+                                            {% endif %}
+                                        </p>
+                                        <p class="text-xs text-gray-500">{{ child_call.call_date|date:"m월 d일 H:i" }}</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    {% if child_call.call_result == 'connected' %}
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">통화성공</span>
+                                    {% endif %}
+                                    {% if child_call.is_converted %}
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                            <i class="bi bi-check-circle-fill mr-1"></i>계약성사
+                                        </span>
+                                    {% endif %}
+                                    {% if user.is_staff or child_call.caller == user %}
+                                    <button type="button" onclick="deleteCallRecord({{ child_call.id }})"
+                                            class="text-gray-400 hover:text-red-600 transition-colors opacity-0 hover:opacity-100"
+                                            title="삭제">
+                                        <i class="bi bi-trash3 text-sm"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-700">{{ child_call.notes|linebreaksbr }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <!-- 빈 상태 -->
+            <div class="bg-white rounded-lg shadow-sm p-12 text-center">
+                <i class="bi bi-chat-dots text-5xl text-gray-300"></i>
+                <p class="mt-3 text-sm text-gray-500">아직 통화 기록이 없습니다.</p>
+                <p class="text-sm text-gray-400">위에서 첫 통화 내용을 입력해보세요!</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 모바일/태블릿용 탭 전환 -->
+    <div class="xl:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 z-50">
+        <div class="flex justify-around">
+            <button onclick="showMobileSection('customer')" id="customer-info-tab" class="px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary">
+                고객정보
+            </button>
+            <button onclick="showMobileSection('calls')" id="call-records-tab" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">
+                통화기록
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+        <div class="mb-4">
+            <i class="bi bi-exclamation-triangle text-yellow-500 text-3xl"></i>
+            <h3 class="text-lg font-medium text-gray-900 mt-2">삭제 확인</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">이 통화 기록을 삭제하시겠습니까?</p>
+        <p class="text-xs text-gray-400 mb-4">삭제된 기록은 관리자가 복원할 수 있습니다.</p>
+        <div class="flex justify-end gap-3">
+            <button type="button" onclick="closeDeleteModal()" 
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                취소
+            </button>
+            <button type="button" id="confirmDeleteBtn" 
+                    class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                삭제
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 모바일 섹션 전환 함수
+function showMobileSection(section) {
+    const customerSection = document.getElementById('customer-info-section');
+    const callSection = document.getElementById('call-records-section');
+    const customerTab = document.getElementById('customer-info-tab');
+    const callTab = document.getElementById('call-records-tab');
+    
+    if (section === 'customer') {
+        // 고객정보 표시
+        customerSection.classList.remove('hidden');
+        callSection.classList.add('hidden');
+        
+        // 탭 스타일 변경
+        customerTab.classList.add('text-primary', 'border-b-2', 'border-primary');
+        customerTab.classList.remove('text-gray-500');
+        callTab.classList.remove('text-primary', 'border-b-2', 'border-primary');
+        callTab.classList.add('text-gray-500');
+    } else {
+        // 통화기록 표시
+        callSection.classList.remove('hidden');
+        customerSection.classList.add('hidden');
+        
+        // 탭 스타일 변경
+        callTab.classList.add('text-primary', 'border-b-2', 'border-primary');
+        callTab.classList.remove('text-gray-500');
+        customerTab.classList.remove('text-primary', 'border-b-2', 'border-primary');
+        customerTab.classList.add('text-gray-500');
+    }
+}
+
+// 전화번호 복사 기능
+function copyPhone(phone) {
+    navigator.clipboard.writeText(phone).then(function() {
+        showToast('번호가 복사되었습니다: ' + phone, 'success');
+    }).catch(function() {
+        alert('번호가 복사되었습니다: ' + phone);
+    });
+}
+
+// 빠른 템플릿 버튼 클릭
+document.querySelectorAll('.template-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const template = this.getAttribute('data-template');
+        const notesField = document.querySelector('textarea[name="notes"]');
+        
+        if (notesField.value.trim()) {
+            notesField.value += '\n' + template;
+        } else {
+            notesField.value = template;
+        }
+        
+        notesField.focus();
+        
+        // 버튼 피드백
+        this.classList.add('bg-primary', 'text-white');
+        this.classList.remove('bg-gray-200', 'text-gray-700');
+        setTimeout(() => {
+            this.classList.remove('bg-primary', 'text-white');
+            this.classList.add('bg-gray-200', 'text-gray-700');
+        }, 300);
+    });
+});
+
+// 통화결과에 따른 관심분야 자동 설정
+document.querySelector('select[name="call_result"]').addEventListener('change', function() {
+    const interestSelect = document.querySelector('select[name="interest_type"]');
+    
+    if (this.value === 'no_answer' || this.value === 'busy' || this.value === 'wrong_number') {
+        interestSelect.value = '';
+        interestSelect.disabled = true;
+    } else {
+        interestSelect.disabled = false;
+    }
+});
+
+// 빠른 통화 기록 폼 제출
+document.getElementById('quickCallForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    const notesField = this.querySelector('textarea[name="notes"]');
+    
+    if (!notesField.value.trim()) {
+        notesField.focus();
+        notesField.classList.add('border-red-500');
+        showToast('통화 내용을 입력해주세요.', 'error');
+        setTimeout(() => notesField.classList.remove('border-red-500'), 3000);
+        return;
+    }
+    
+    submitBtn.innerHTML = '<i class="bi bi-arrow-repeat animate-spin mr-2"></i>등록중...';
+    submitBtn.disabled = true;
+    
+    fetch('{% url "add_call_record" customer.pk %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('통화 기록이 등록되었습니다!', 'success');
+            this.reset();
+            notesField.focus();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            throw new Error(data.error || '등록 중 오류가 발생했습니다.');
+        }
+    })
+    .catch(error => {
+        showToast(error.message, 'error');
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+});
+
+// 통화 기록 삭제 함수
+let deleteCallId = null;
+
+function deleteCallRecord(callId) {
+    deleteCallId = callId;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    deleteCallId = null;
+}
+
+// 삭제 확인 버튼 클릭
+document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+    if (!deleteCallId) return;
+    
+    const originalText = this.innerHTML;
+    this.innerHTML = '<i class="bi bi-arrow-repeat animate-spin mr-2"></i>삭제중...';
+    this.disabled = true;
+    
+    fetch(`/call-records/${deleteCallId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            'action': 'soft_delete'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('통화 기록이 삭제되었습니다.', 'success');
+            
+            const callElement = document.querySelector(`[data-call-id="${deleteCallId}"]`);
+            if (callElement) {
+                callElement.style.transition = 'all 0.3s ease';
+                callElement.style.opacity = '0';
+                callElement.style.transform = 'translateX(-100%)';
+                
+                setTimeout(() => {
+                    callElement.remove();
+                    const remainingCalls = document.querySelectorAll('[data-call-id]').length;
+                    if (remainingCalls === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
+            
+            closeDeleteModal();
+        } else {
+            throw new Error(data.error || '삭제 중 오류가 발생했습니다.');
+        }
+    })
+    .catch(error => {
+        showToast(error.message, 'error');
+    })
+    .finally(() => {
+        this.innerHTML = originalText;
+        this.disabled = false;
+        deleteCallId = null;
+    });
+});
+
+// 텍스트 영역 자동 크기 조절
+document.querySelector('textarea[name="notes"]').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.max(this.scrollHeight, 60) + 'px';
+});
+
+// 엔터키로 빠른 전송 (Shift+Enter는 줄바꿈)
+document.querySelector('textarea[name="notes"]').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('quickCallForm').dispatchEvent(new Event('submit'));
+    }
+});
+
+// 후속조치 체크박스 토글
+document.getElementById('requiresFollowUp').addEventListener('change', function() {
+    const followUpSection = document.getElementById('followUpDateSection');
+    if (this.checked) {
+        followUpSection.classList.remove('hidden');
+        const today = new Date();
+        const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+        const dateInput = followUpSection.querySelector('input[type="date"]');
+        dateInput.value = tomorrow.toISOString().split('T')[0];
+        dateInput.min = today.toISOString().split('T')[0];
+    } else {
+        followUpSection.classList.add('hidden');
+    }
+});
+
+// 후속조치 폼 토글
+function toggleFollowUpForm(callId) {
+    const form = document.getElementById(`followup-form-${callId}`);
+    if (form.classList.contains('hidden')) {
+        form.classList.remove('hidden');
+        form.querySelector('textarea').focus();
+    } else {
+        form.classList.add('hidden');
+    }
+}
+
+// 후속조치 제출
+document.querySelectorAll('.follow-up-submit-form').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const callId = this.dataset.callId;
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        
+        submitBtn.innerHTML = '<i class="bi bi-arrow-repeat animate-spin"></i>';
+        submitBtn.disabled = true;
+        
+        // 후속조치를 새 통화기록으로 저장
+        const formData = new FormData();
+        formData.append('customer_id', '{{ customer.id }}');
+        formData.append('call_result', 'connected');
+        formData.append('notes', `[후속조치] ${this.querySelector('textarea[name="follow_up_notes"]').value}`);
+        formData.append('parent_call_id', callId);
+        
+        fetch('{% url "add_call_record" customer.pk %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('후속조치가 추가되었습니다!', 'success');
+                this.reset();
+                toggleFollowUpForm(callId);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                throw new Error(data.error || '등록 중 오류가 발생했습니다.');
+            }
+        })
+        .catch(error => {
+            showToast(error.message, 'error');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    });
+});
+
+// 페이지 로드시 초기화
+document.addEventListener('DOMContentLoaded', function() {
+    // 모바일에서 초기 섹션 설정
+    if (window.innerWidth < 1280) {
+        showMobileSection('customer');
+    }
+    
+    // 텍스트 영역에 포커스
+    const notesField = document.querySelector('textarea[name="notes"]');
+    if (notesField) {
+        notesField.focus();
+    }
+});
+
+// 윈도우 리사이즈 처리
+window.addEventListener('resize', function() {
+    if (window.innerWidth >= 1280) {
+        // 데스크톱 모드일 때 두 섹션 모두 표시
+        document.getElementById('customer-info-section').classList.remove('hidden');
+        document.getElementById('call-records-section').classList.remove('hidden');
+    }
+});
+</script>
+{% endblock %}
