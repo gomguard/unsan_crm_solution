@@ -59,9 +59,6 @@ def dashboard(request):
     today_calls = CallRecord.objects.filter(call_date__date=today, is_deleted=False)
     today_connected = today_calls.filter(call_result='connected')
     
-    # 오늘 이미 통화한 고객 ID 목록
-    today_called_customer_ids = today_calls.values_list('customer_id', flat=True).distinct()
-    
     # 전체 통계
     total_customers = Customer.objects.count()
     pending_customers = Customer.objects.filter(status='pending').count()
@@ -77,37 +74,65 @@ def dashboard(request):
         inspection_expiry_date__lte=three_months_later
     ).count()
     
-    vip_customers = Customer.objects.filter(customer_grade='vip').count()
-    
-    # ===== 해피콜 관련 통계 (개선) =====
-    # 3개월콜 대상
-    happy_call_3month_total = Customer.objects.filter(needs_3month_call=True).count()
+        
+    # 3개월콜 대상 (검사만료일 3개월 전 ±1일)
+    target_3month = today + timedelta(days=90)  # 3개월 후
+    happy_call_3month_total = Customer.objects.filter(
+        inspection_expiry_date__gte=target_3month - timedelta(days=1),
+        inspection_expiry_date__lte=target_3month + timedelta(days=1)
+    ).count()
+
+    # 6개월콜 대상 (검사만료일 6개월 전 ±1일)
+    target_6month = today + timedelta(days=180)  # 6개월 후
+    happy_call_6month_total = Customer.objects.filter(
+        inspection_expiry_date__gte=target_6month - timedelta(days=1),
+        inspection_expiry_date__lte=target_6month + timedelta(days=1)
+    ).count()
+
+    # 12개월콜 대상 (검사만료일 12개월 전 ±1일)
+    target_12month = today + timedelta(days=365)  # 12개월 후
+    happy_call_12month_total = Customer.objects.filter(
+        inspection_expiry_date__gte=target_12month - timedelta(days=1),
+        inspection_expiry_date__lte=target_12month + timedelta(days=1)
+    ).count()
+
+    # 18개월콜 대상 (검사만료일 18개월 전 ±1일)
+    target_18month = today + timedelta(days=548)  # 18개월 후 (365 + 183)
+    happy_call_18month_total = Customer.objects.filter(
+        inspection_expiry_date__gte=target_18month - timedelta(days=1),
+        inspection_expiry_date__lte=target_18month + timedelta(days=1)
+    ).count()
+
+    # 오늘 통화한 고객 ID 목록
+    today_called_customer_ids = today_calls.values_list('customer_id', flat=True).distinct()
+
+    # 각 해피콜의 남은 대상자 계산
     happy_call_3month_remaining = Customer.objects.filter(
-        needs_3month_call=True
+        inspection_expiry_date__gte=target_3month - timedelta(days=1),
+        inspection_expiry_date__lte=target_3month + timedelta(days=1)
     ).exclude(id__in=today_called_customer_ids).count()
-    happy_call_3month_completed = happy_call_3month_total - happy_call_3month_remaining
-    
-    # 6개월콜 대상
-    happy_call_6month_total = Customer.objects.filter(needs_6month_call=True).count()
+
     happy_call_6month_remaining = Customer.objects.filter(
-        needs_6month_call=True
+        inspection_expiry_date__gte=target_6month - timedelta(days=1),
+        inspection_expiry_date__lte=target_6month + timedelta(days=1)
     ).exclude(id__in=today_called_customer_ids).count()
-    happy_call_6month_completed = happy_call_6month_total - happy_call_6month_remaining
-    
-    # 12개월콜 대상
-    happy_call_12month_total = Customer.objects.filter(needs_12month_call=True).count()
+
     happy_call_12month_remaining = Customer.objects.filter(
-        needs_12month_call=True
+        inspection_expiry_date__gte=target_12month - timedelta(days=1),
+        inspection_expiry_date__lte=target_12month + timedelta(days=1)
     ).exclude(id__in=today_called_customer_ids).count()
-    happy_call_12month_completed = happy_call_12month_total - happy_call_12month_remaining
-    
-    # 18개월콜 대상
-    happy_call_18month_total = Customer.objects.filter(needs_18month_call=True).count()
+
     happy_call_18month_remaining = Customer.objects.filter(
-        needs_18month_call=True
+        inspection_expiry_date__gte=target_18month - timedelta(days=1),
+        inspection_expiry_date__lte=target_18month + timedelta(days=1)
     ).exclude(id__in=today_called_customer_ids).count()
+
+    # 완료된 수 계산
+    happy_call_3month_completed = happy_call_3month_total - happy_call_3month_remaining
+    happy_call_6month_completed = happy_call_6month_total - happy_call_6month_remaining
+    happy_call_12month_completed = happy_call_12month_total - happy_call_12month_remaining
     happy_call_18month_completed = happy_call_18month_total - happy_call_18month_remaining
-    
+
     # 검사만료 고객 (오늘 통화 현황)
     overdue_customers_total = Customer.objects.filter(
         inspection_expiry_date__isnull=False,
