@@ -132,7 +132,8 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 {% for customer in customers %}
-                <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="location.href='{% url 'customer_detail' customer.pk %}'">
+                <tr class="{% if customer.is_do_not_call or customer.status == 'do_not_call' %}bg-red-50 hover:bg-red-100{% else %}hover:bg-gray-50{% endif %} cursor-pointer transition-colors" 
+    onclick="location.href='{% url 'customer_detail' customer.pk %}'">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
                             <div class="flex-shrink-0 h-10 w-10">
@@ -194,8 +195,11 @@
                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">재통화예정</span>
                         {% elif customer.status == 'converted' %}
                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">계약성사</span>
+                        
                         {% elif customer.status == 'do_not_call' %}
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">통화거부</span>
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-600 text-white">
+                            <i class="bi bi-telephone-x-fill mr-1"></i>통화거부
+                        </span>
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">

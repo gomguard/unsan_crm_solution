@@ -261,8 +261,7 @@ def dashboard(request):
                 'caller__username'
             ).annotate(
                 total_calls=Count('id'),
-                connected_calls=Count('id', filter=Q(call_result='connected')),
-                converted_calls=Count('id', filter=Q(is_converted=True))
+                connected_calls=Count('id', filter=Q(call_result='connected'))
             )
     except:
         pass
@@ -283,11 +282,6 @@ def dashboard(request):
         customer__customer_grade='vip'
     ).count()
     
-    # 계약성사률 계산
-    today_conversions = today_connected.filter(is_converted=True).count()
-    conversion_rate = 0
-    if today_connected.count() > 0:
-        conversion_rate = round((today_conversions / today_connected.count()) * 100, 1)
 
     # Context 생성
     context = {
@@ -350,8 +344,7 @@ def dashboard(request):
         'due_soon_customers': due_soon_customers,
         'today_total_calls': today_calls.count(),
         'today_connected_calls': today_connected.count(),
-        'today_conversions': today_conversions,
-        'today_conversion_rate': conversion_rate,
+        
         'recent_calls': recent_calls,
         'agent_stats': agent_stats,
         'today_overdue_calls': today_overdue_calls,
@@ -561,6 +554,12 @@ def delete_call_record(request, call_id):
 def add_call_record(request, pk):
     """통화 기록 추가 (AJAX 지원) - 개선된 후속조치 처리"""
     customer = get_object_or_404(Customer, pk=pk)
+    # 통화 금지 고객 체크 추가
+    if customer.is_do_not_call and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': '통화 금지 고객입니다. 관리자에게 문의하세요.'
+        })
     
     if request.method == 'POST':
         try:
@@ -573,7 +572,7 @@ def add_call_record(request, pk):
             if not call_result:
                 return JsonResponse({
                     'success': False, 
-                    'error': '통화 결과를 선택해주세요.'
+                    'error': '통화 상태를 선택해주세요.'
                 })
             
             if not notes:
@@ -591,12 +590,11 @@ def add_call_record(request, pk):
                     call_result=call_result,
                     interest_type=interest_type if interest_type else None,
                     notes=notes,
+                    customer_attitude=request.POST.get('customer_attitude') or None,  # 추가!
                     requires_follow_up=request.POST.get('requires_follow_up') == 'on',
                     follow_up_date=request.POST.get('follow_up_date') or None,
                     follow_up_notes=request.POST.get('follow_up_memo', ''),
-                    parent_call_id=request.POST.get('parent_call_id') or None,
-                    is_converted=request.POST.get('is_converted') == 'on',
-                    conversion_amount=request.POST.get('conversion_amount') or None
+                    parent_call_id=request.POST.get('parent_call_id') or None
                 )
                 
                 # 2. 후속조치 완료 처리 로직
@@ -645,14 +643,17 @@ def add_call_record(request, pk):
                         customer.status = 'interested'
                     else:
                         customer.status = 'contacted'
-                    
-                    # 계약성사인 경우
-                    if call_record.is_converted:
-                        customer.status = 'converted'
-                    
+                                        
                     customer.save()
                     print(f"고객 상태 업데이트: {customer.name} → {customer.status}")
                 
+                if request.POST.get('request_do_not_call') == 'on':
+                    customer.is_do_not_call = True
+                    customer.do_not_call_reason = "고객 요청"
+                    customer.do_not_call_date = timezone.now()
+                    customer.status = 'do_not_call'
+                    customer.save()
+                    
                 elif call_record.call_result in ['no_answer', 'busy']:
                     # 부재중이나 통화중인 경우 상태 유지
                     pass
@@ -732,7 +733,7 @@ def call_records(request):
     if agent_filter:
         records = records.filter(caller__username=agent_filter)
     
-    # 통화결과 필터
+    # 통화상태 필터
     result_filter = request.GET.get('result', '')
     if result_filter:
         records = records.filter(call_result=result_filter)
@@ -761,14 +762,12 @@ def call_records(request):
         )
     elif filter_type == 'follow_up':
         records = records.filter(follow_up_date__isnull=False)
-    elif filter_type == 'converted':
-        records = records.filter(is_converted=True)
+    
     
     # 통계 계산
     total_calls = records.count()
     connected_calls = records.filter(call_result='connected').count()
     follow_up_calls = records.filter(requires_follow_up=True).count()
-    conversions = records.filter(is_converted=True).count()
     
     # 페이징
     paginator = Paginator(records, 50)
@@ -788,7 +787,6 @@ def call_records(request):
         'total_calls': total_calls,
         'connected_calls': connected_calls,
         'follow_up_calls': follow_up_calls,
-        'conversions': conversions,
         'today': today,
     }
     
@@ -1009,8 +1007,9 @@ def add_follow_up(request):
             )
             
             # 후속조치가 완료 타입이면 원 통화 기록도 완료 처리
-            if request.POST.get('follow_up_action') in ['converted', 'closed']:
+            if request.POST.get('follow_up_action') in ['converted', 'closed', 'data_sent']:
                 call_record.follow_up_completed = True
+                call_record.follow_up_completed_at = timezone.now()  # 완료 시간 기록 추가
                 call_record.save()
             
             # 새 통화 기록으로도 저장 (parent_call 관계 설정)

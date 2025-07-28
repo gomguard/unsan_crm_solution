@@ -85,9 +85,6 @@
         <a href="?filter=follow_up" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full {% if request.GET.filter == 'follow_up' %}bg-orange-600 text-white{% else %}bg-orange-100 text-orange-700 hover:bg-orange-200{% endif %} transition-colors">
             <i class="bi bi-calendar-event mr-1"></i>재통화예정
         </a>
-        <a href="?filter=converted" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full {% if request.GET.filter == 'converted' %}bg-green-600 text-white{% else %}bg-green-100 text-green-700 hover:bg-green-200{% endif %} transition-colors">
-            <i class="bi bi-check-circle mr-1"></i>계약성사
-        </a>
     </div>
 </div>
 
@@ -129,17 +126,6 @@
         </div>
     </div>
     
-    <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-purple-500">
-        <div class="flex items-center">
-            <div class="flex-shrink-0">
-                <i class="bi bi-star text-3xl text-purple-500"></i>
-            </div>
-            <div class="ml-4">
-                <div class="text-2xl font-bold text-gray-900">{{ conversions|default:0 }}</div>
-                <div class="text-sm text-gray-500">계약 성사</div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- 통화 기록 리스트 -->
@@ -221,12 +207,6 @@
                     {% endif %}
                 {% endif %}
                 
-                {% if record.is_converted %}
-                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        <i class="bi bi-check-circle-fill mr-1"></i>계약성사
-                        {% if record.conversion_amount %}({{ record.conversion_amount|floatformat:0 }}원){% endif %}
-                    </span>
-                {% endif %}
                 
                 {% if record.follow_up_date %}
                     <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
@@ -239,12 +219,35 @@
                         <i class="bi bi-exclamation-square-fill mr-1"></i>후속조치필요
                     </span>
                 {% endif %}
+
+                {% if record.follow_up_notes %}
+                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                        <i class="bi bi-sticky-fill mr-1"></i>후속메모있음
+                    </span>
+                {% endif %}
             </div>
             
             <!-- 상담 내용 -->
             {% if record.notes %}
             <div class="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
                 {{ record.notes|linebreaksbr }}
+            </div>
+            {% endif %}
+
+            {% if record.follow_up_notes %}
+            <div class="mt-2 text-sm bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <div class="flex items-start">
+                    <i class="bi bi-sticky-fill text-purple-600 mr-2 flex-shrink-0"></i>
+                    <div>
+                        <div class="font-medium text-purple-900 mb-1">후속조치 메모</div>
+                        <div class="text-purple-800">{{ record.follow_up_notes|linebreaksbr }}</div>
+                        {% if record.follow_up_date %}
+                            <div class="text-xs text-purple-600 mt-1">
+                                <i class="bi bi-calendar-check mr-1"></i>예정일: {{ record.follow_up_date }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
             {% endif %}
             

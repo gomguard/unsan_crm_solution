@@ -9,9 +9,7 @@ class CallRecordForm(forms.ModelForm):
             'call_result', 
             'interest_type', 
             'notes', 
-            'follow_up_date', 
-            'is_converted', 
-            'conversion_amount'
+            'follow_up_date'
         ]
         widgets = {
             'call_result': forms.Select(attrs={
@@ -30,21 +28,16 @@ class CallRecordForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'date'
             }),
-            'is_converted': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-            'conversion_amount': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': '계약 금액 (원)'  # 변경: 계약성사 금액 → 계약 금액
+            'customer_attitude': forms.Select(attrs={
+                'class': 'form-select'
             })
         }
         labels = {
-            'call_result': '통화 결과',
+            'call_result': '통화 상태',
             'interest_type': '관심 분야',
             'notes': '상담 내용',
             'follow_up_date': '재통화 예정일',
-            'is_converted': '계약 성사 여부',  # 변경: 계약성사 여부 → 계약 성사 여부
-            'conversion_amount': '계약 금액'   # 변경: 계약성사 금액 → 계약 금액
+            'customer_attitude': '고객 반응',
         }
 
 class CustomerUploadForm(forms.Form):

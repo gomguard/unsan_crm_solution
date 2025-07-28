@@ -48,6 +48,11 @@ class Customer(models.Model):
         ('converted', '계약성사'),
         ('do_not_call', '통화거부'),
     ]
+    # 기존 STATUS_CHOICES 바로 아래에 추가
+    # 통화 금지 관련 필드 추가
+    is_do_not_call = models.BooleanField(default=False, verbose_name='통화금지')
+    do_not_call_reason = models.TextField(blank=True, verbose_name='통화금지사유')
+    do_not_call_date = models.DateTimeField(null=True, blank=True, verbose_name='통화금지등록일')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='상태')
     
     # 태그 및 우선순위
@@ -251,7 +256,7 @@ class CallRecord(models.Model):
     caller = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='상담원')
     call_date = models.DateTimeField(default=timezone.now, verbose_name='통화일시')
     
-    # 통화 결과
+    # 통화 상태
     RESULT_CHOICES = [
         ('connected', '통화성공'),
         ('no_answer', '부재중'),
@@ -259,7 +264,7 @@ class CallRecord(models.Model):
         ('wrong_number', '잘못된번호'),
         ('callback_requested', '재통화요청'),
     ]
-    call_result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name='통화결과')
+    call_result = models.CharField(max_length=20, choices=RESULT_CHOICES, verbose_name='통화상태')
     
     # 상담 내용
     INTEREST_CHOICES = [
@@ -271,13 +276,21 @@ class CallRecord(models.Model):
     ]
     interest_type = models.CharField(max_length=20, choices=INTEREST_CHOICES, null=True, blank=True, verbose_name='관심분야')
     
+    # 고객 반응
+    ATTITUDE_CHOICES = [
+        ('positive', '긍정적'),
+        ('neutral', '보통'),
+        ('negative', '부정적'),
+    ]
+    customer_attitude = models.CharField(max_length=20, choices=ATTITUDE_CHOICES, null=True, blank=True, verbose_name='고객반응')
+    
     # 세부 내용
     notes = models.TextField(blank=True, verbose_name='상담내용')
     follow_up_date = models.DateField(null=True, blank=True, verbose_name='재통화예정일')
     
     # 성과
-    is_converted = models.BooleanField(default=False, verbose_name='계약성사여부')
-    conversion_amount = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True, verbose_name='계약금액')
+    # is_converted = models.BooleanField(default=False, verbose_name='계약성사여부')
+    # conversion_amount = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True, verbose_name='계약금액')
     
     # 소프트 삭제 필드들 (추가)
     is_deleted = models.BooleanField(default=False, verbose_name='삭제여부')
