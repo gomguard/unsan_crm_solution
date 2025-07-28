@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block title %}내 배정 목록{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+        <i class="bi bi-clipboard-check mr-2"></i>
+        내 배정 목록
+    </h1>
+    <div class="mt-4 sm:mt-0">
+        <span class="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 text-sm font-medium rounded-lg">
+            <i class="bi bi-check-circle mr-2"></i>
+            오늘 완료: {{ completed_today }}건
+        </span>
+    </div>
+</div>
+
+<!-- 요약 정보 -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-yellow-500">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="bi bi-hourglass-split text-3xl text-yellow-500"></i>
+            </div>
+            <div class="ml-4">
+                <div class="text-2xl font-bold text-gray-900">{{ assignments|length }}</div>
+                <div class="text-sm text-gray-500">대기중</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-red-500">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="bi bi-exclamation-triangle text-3xl text-red-500"></i>
+            </div>
+            <div class="ml-4">
+                <div class="text-2xl font-bold text-gray-900">
+                    {{ assignments|dictsort:"priority"|first.priority|default:"0" }}
+                </div>
+                <div class="text-sm text-gray-500">긴급</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-orange-500">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="bi bi-calendar-x text-3xl text-orange-500"></i>
+            </div>
+            <div class="ml-4">
+                <div class="text-2xl font-bold text-gray-900">
+                    {% with overdue=0 %}
+                    {% for a in assignments %}
+                        {% if a.due_date and a.due_date < today %}
+                            {% with overdue=overdue|add:1 %}{% endwith %}
+                        {% endif %}
+                    {% endfor %}
+                    {{ overdue }}
+                    {% endwith %}
+                </div>
+                <div class="text-sm text-gray-500">기한초과</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="bi bi-check-circle text-3xl text-green-500"></i>
+            </div>
+            <div class="ml-4">
+                <div class="text-2xl font-bold text-gray-900">{{ completed_today }}</div>
+                <div class="text-sm text-gray-500">오늘완료</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 배정 목록 -->
+<div class="bg-white rounded-lg shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-medium text-gray-900">배정된 고객 목록</h2>
+    </div>
+    
+    {% if assignments %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">우선순위</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객정보</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">차량/검사</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">배정정보</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">액션</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for assignment in assignments %}
+                <tr class="hover:bg-gray-50" data-assignment-id="{{ assignment.id }}">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if assignment.priority == 'urgent' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                <i class="bi bi-exclamation-triangle-fill mr-1"></i>긴급
+                            </span>
+                        {% elif assignment.priority == 'high' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">높음</span>
+                        {% elif assignment.priority == 'low' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">낮음</span>
+                        {% else %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">보통</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm font-medium text-gray-900">{{ assignment.customer.name }}</div>
+                        <div class="text-xs text-gray-500">{{ assignment.customer.phone }}</div>
+                        {% if assignment.customer.customer_grade == 'vip' %}
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 mt-1">
+                                <i class="bi bi-star-fill mr-1"></i>VIP
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm font-medium text-gray-900">{{ assignment.customer.vehicle_number }}</div>
+                        {% if assignment.customer.inspection_expiry_date %}
+                            <div class="text-xs {% if assignment.customer.is_inspection_overdue %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">
+                                검사: {{ assignment.customer.inspection_expiry_date }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-xs text-gray-500">
+                            배정: {{ assignment.assigned_at|date:"m/d" }}
+                        </div>
+                        {% if assignment.due_date %}
+                            <div class="text-xs {% if assignment.due_date < today %}text-red-600 font-semibold{% else %}text-gray-900{% endif %}">
+                                기한: {{ assignment.due_date }}
+                            </div>
+                        {% endif %}
+                        {% if assignment.notes %}
+                            <div class="text-xs text-gray-600 mt-1">
+                                <i class="bi bi-sticky-fill mr-1"></i>{{ assignment.notes|truncatewords:10 }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <select class="status-select text-sm rounded-lg px-3 py-1 border border-gray-300" 
+                                data-assignment-id="{{ assignment.id }}">
+                            <option value="pending" {% if assignment.status == 'pending' %}selected{% endif %}>대기</option>
+                            <option value="in_progress" {% if assignment.status == 'in_progress' %}selected{% endif %}>진행중</option>
+                            <option value="completed" {% if assignment.status == 'completed' %}selected{% endif %}>완료</option>
+                        </select>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                        <a href="{% url 'customer_detail' assignment.customer.pk %}" 
+                           class="inline-flex items-center px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-hover transition-colors">
+                            <i class="bi bi-telephone mr-1"></i>
+                            통화하기
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <i class="bi bi-clipboard-check text-6xl text-gray-300"></i>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">배정된 고객이 없습니다</h3>
+        <p class="mt-1 text-sm text-gray-500">팀장이 고객을 배정하면 여기에 표시됩니다.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// 상태 변경 처리
+document.querySelectorAll('.status-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const assignmentId = this.dataset.assignmentId;
+        const newStatus = this.value;
+        
+        // AJAX로 상태 업데이트
+        fetch(`/assignment/${assignmentId}/update/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `status=${newStatus}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('상태가 업데이트되었습니다.', 'success');
+                
+                // 완료 상태로 변경 시 행 페이드아웃
+                if (newStatus === 'completed') {
+                    const row = document.querySelector(`tr[data-assignment-id="${assignmentId}"]`);
+                    setTimeout(() => {
+                        row.style.transition = 'opacity 0.5s';
+                        row.style.opacity = '0.5';
+                    }, 1000);
+                }
+            } else {
+                showToast('상태 업데이트 실패: ' + data.error, 'error');
+                // 원래 값으로 되돌리기
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showToast('오류가 발생했습니다.', 'error');
+            location.reload();
+        });
+    });
+});
+</script>
+{% endblock %}

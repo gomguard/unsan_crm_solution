@@ -83,11 +83,48 @@
                             통화기록
                         </a>
 
+                        {% if user.userprofile.role == 'agent' %}
+                        <a href="{% url 'my_assignments' %}"
+                           class="{% if request.resolver_match.url_name == 'my_assignments' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-clipboard-check mr-3 text-lg"></i>
+                            내 배정목록
+                            {% if my_pending_assignments > 0 %}
+                                <span class="ml-auto bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                    {{ my_pending_assignments }}
+                                </span>
+                            {% endif %}
+                        </a>
+                        {% endif %}
+
+                        {% if user.userprofile.is_manager_or_above %}
+                        <a href="{% url 'call_assignment' %}"
+                           class="{% if request.resolver_match.url_name == 'call_assignment' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-people-fill mr-3 text-lg"></i>
+                            콜 배정관리
+                        </a>
+                        {% endif %}
+                        
+                        <!-- 데이터업로드 메뉴 수정 -->
+                        {% if user.userprofile.is_manager_or_above %}
                         <a href="{% url 'upload_data' %}"
-                           class="{% if request.resolver_match.url_name == 'upload_data' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                        class="{% if request.resolver_match.url_name == 'upload_data' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
                             <i class="bi bi-upload mr-3 text-lg"></i>
                             데이터업로드
                         </a>
+                        {% endif %}
+
+                        {% if user.userprofile.is_manager_or_above %}
+                        <a href="{% url 'do_not_call_requests' %}"
+                        class="{% if request.resolver_match.url_name == 'do_not_call_requests' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-telephone-x mr-3 text-lg"></i>
+                            통화금지 요청
+                            {% if pending_do_not_call_count > 0 %}
+                                <span class="ml-auto bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                    {{ pending_do_not_call_count }}
+                                </span>
+                            {% endif %}
+                        </a>
+                        {% endif %}
                     </nav>
                     
                     <!-- 통계 -->
@@ -126,7 +163,14 @@
                             <div class="ml-3">
                                 <p class="text-sm font-medium text-white">{{ user.username }}</p>
                                 <p class="text-xs text-gray-400">
-                                    {% if user.is_staff %}관리자{% else %}상담원{% endif %}
+                                    {% if user.userprofile %}
+                                        {{ user.userprofile.get_role_display }}
+                                        {% if user.userprofile.team %}
+                                            · {{ user.userprofile.team }}
+                                        {% endif %}
+                                    {% else %}
+                                        사용자
+                                    {% endif %}
                                 </p>
                             </div>
                         </div>

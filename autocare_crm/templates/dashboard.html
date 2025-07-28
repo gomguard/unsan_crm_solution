@@ -456,7 +456,7 @@
 </div>
 
 <!-- 팀장 전용: 상담원별 성과 -->
-{% if agent_stats %}
+{% if user.userprofile.is_manager_or_above and agent_stats %}
 <div class="mt-8 bg-white rounded-lg shadow-sm">
     <div class="px-6 py-4 border-b border-gray-200">
         <h2 class="text-lg font-medium text-gray-900">상담원별 오늘 성과</h2>
@@ -474,10 +474,6 @@
                     <div class="flex justify-between">
                         <span class="text-gray-600">통화 성공:</span>
                         <span class="font-medium">{{ agent.connected_calls }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">계약 성사:</span>
-                        <span class="font-medium text-green-600">{{ agent.converted_calls }}</span>
                     </div>
                 </div>
             </div>

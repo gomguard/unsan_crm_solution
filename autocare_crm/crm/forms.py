@@ -42,13 +42,17 @@ class CallRecordForm(forms.ModelForm):
 
 class CustomerUploadForm(forms.Form):
     file = forms.FileField(
-        label='CSV 파일',
-        widget=forms.FileInput(attrs={
+        label='파일 선택',
+        help_text='CSV 또는 Excel 파일 (최대 50MB)'
+    )
+    data_extract_date = forms.DateField(
+        label='데이터 추출일',
+        widget=forms.DateInput(attrs={
+            'type': 'date',
             'class': 'form-control',
-            'accept': '.csv',
             'required': True
         }),
-        help_text='CSV 파일만 업로드 가능합니다. 파일 크기는 10MB 이하로 제한됩니다.'
+        help_text='업로드할 데이터가 추출된 날짜를 입력하세요'
     )
     
     def clean_file(self):

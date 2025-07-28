@@ -2,6 +2,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from datetime import datetime, timedelta
+
 
 class Customer(models.Model):
     # 기본 정보
@@ -54,6 +56,25 @@ class Customer(models.Model):
     do_not_call_reason = models.TextField(blank=True, verbose_name='통화금지사유')
     do_not_call_date = models.DateTimeField(null=True, blank=True, verbose_name='통화금지등록일')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='상태')
+    do_not_call_requested = models.BooleanField(default=False, verbose_name='통화금지요청중')
+    do_not_call_requested_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='do_not_call_requests',
+        verbose_name='요청자'
+    )
+    do_not_call_request_date = models.DateTimeField(null=True, blank=True, verbose_name='요청일시')
+    do_not_call_approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='do_not_call_approvals',
+        verbose_name='승인자'
+    )
+    do_not_call_approved_date = models.DateTimeField(null=True, blank=True, verbose_name='승인일시')
     
     # 태그 및 우선순위
     PRIORITY_CHOICES = [
@@ -94,6 +115,35 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # 실제 검사일 (검사만료일로부터 계산된 값)
+    actual_inspection_date = models.DateField(
+        null=True, 
+        blank=True,
+        verbose_name='실제 검사일'
+    )
+    
+    # 데이터 추출일 (업로드 시 입력)
+    data_extracted_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='데이터 추출일'
+    )
+    
+    def calculate_inspection_date(self, extract_date):
+        """데이터 추출일 기준으로 실제 검사일 계산"""
+        if self.inspection_expiry_date:
+            if self.inspection_expiry_date > extract_date:
+                # 만료일이 추출일보다 미래 = 최근 검사받음
+                # 실제 검사일 = 만료일 - 2년
+                self.actual_inspection_date = self.inspection_expiry_date - timedelta(days=730)
+            else:
+                # 만료일이 추출일보다 과거 = 검사 안받음
+                # 마지막 검사일 = 만료일 - 2년
+                self.actual_inspection_date = self.inspection_expiry_date - timedelta(days=730)
+            self.data_extracted_date = extract_date
+            return self.actual_inspection_date
+        return None
+
     class Meta:
         verbose_name = '고객'
         verbose_name_plural = '고객들'
@@ -361,15 +411,16 @@ class UploadHistory(models.Model):
         return f"{self.file_name} - {self.upload_date.strftime('%Y-%m-%d')}"
 
 
-# 사용자 프로필 확장 (팀장/팀원 구분)
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     ROLE_CHOICES = [
-        ('manager', '팀장'),
         ('agent', '상담원'),
+        ('manager', '팀장'),
+        ('admin', '관리자'),  # 추가
     ]
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='agent')
     daily_call_target = models.IntegerField(default=100, verbose_name='일일통화목표')
+    team = models.CharField(max_length=50, blank=True, verbose_name='소속팀')  # 추가
     
     class Meta:
         verbose_name = '사용자프로필'
@@ -378,6 +429,14 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.get_role_display()}"
     
+    # 권한 체크 메서드 추가
+    def is_manager_or_above(self):
+        return self.role in ['manager', 'admin']
+    
+    def is_admin(self):
+        return self.role == 'admin'
+    
+
 class CallFollowUp(models.Model):
     """통화 후속조치 기록"""
     call_record = models.ForeignKey(CallRecord, on_delete=models.CASCADE, related_name='follow_ups')
@@ -399,3 +458,63 @@ class CallFollowUp(models.Model):
         verbose_name = '후속조치'
         verbose_name_plural = '후속조치들'
         ordering = ['created_at']
+
+
+class CallAssignment(models.Model):
+    """콜 배정 모델"""
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='assignments')
+    assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assigned_calls')
+    assigned_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assignments_made')
+    assigned_at = models.DateTimeField(auto_now_add=True, db_column='assigned_at')  # DB 컬럼명 명시
+    completed_at = models.DateTimeField(null=True, blank=True, db_column='completed_at')
+    due_date = models.DateField(null=True, blank=True, verbose_name='처리기한')
+    priority = models.CharField(max_length=10, choices=[
+        ('urgent', '긴급'),
+        ('high', '높음'),
+        ('normal', '보통'),
+        ('low', '낮음'),
+    ], default='normal')
+    status = models.CharField(max_length=20, choices=[
+        ('pending', '대기'),
+        ('in_progress', '진행중'),
+        ('completed', '완료'),
+        ('cancelled', '취소'),
+    ], default='pending')
+    notes = models.TextField(blank=True, default='', verbose_name='배정메모')
+    completed_date = models.DateTimeField(null=True, blank=True)
+    
+    # 호환성을 위한 property 추가
+    @property
+    def assigned_date(self):
+        return self.assigned_at
+    
+    class Meta:
+        verbose_name = '콜배정'
+        verbose_name_plural = '콜배정들'
+        ordering = ['-assigned_at']
+        
+    def __str__(self):
+        return f"{self.customer.name} → {self.assigned_to.username}"
+    
+    def is_expired(self):
+        """배정 만료 여부 확인 (7일 경과 시 만료)"""
+        if self.status in ['completed', 'cancelled']:
+            return True
+        expire_date = self.assigned_at + timedelta(days=7)
+        return timezone.now() > expire_date
+    
+    def auto_expire(self):
+        """자동 만료 처리"""
+        if self.is_expired() and self.status in ['pending', 'in_progress']:
+            self.status = 'expired'
+            self.completed_date = timezone.now()
+            self.notes += f"\n[시스템] {timezone.now().strftime('%Y-%m-%d %H:%M')} - 7일 경과로 자동 만료"
+            self.save()
+            return True
+        return False
+    
+    class Meta:
+        verbose_name = '콜배정'
+        verbose_name_plural = '콜배정들'
+        ordering = ['-assigned_at']
+    

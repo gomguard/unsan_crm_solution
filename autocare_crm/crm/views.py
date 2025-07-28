@@ -3,7 +3,6 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q, Count
 from django.utils import timezone
 from django.db import transaction
 from datetime import datetime, timedelta, date
@@ -15,8 +14,11 @@ from django.http import JsonResponse
 import json
 from django.contrib.auth.models import User
 
-from .models import Customer, CallRecord, UploadHistory, UserProfile, CallFollowUp
+from .models import Customer, CallRecord, UploadHistory, UserProfile, CallFollowUp, CallAssignment
 from .forms import CallRecordForm, CustomerUploadForm
+from .decorators import manager_required, admin_required, ajax_manager_required
+from django.db.models import Q, Count, Prefetch
+from django.db import transaction
 
 def get_sidebar_stats():
     """사이드바에 표시할 통계 정보 계산"""
@@ -74,57 +76,57 @@ def dashboard(request):
         inspection_expiry_date__lte=three_months_later
     ).count()
     
-        
-    # 3개월콜 대상 (검사만료일 3개월 전 ±1일)
-    target_3month = today + timedelta(days=90)  # 3개월 후
+    # 실제 검사일 기준 해피콜 대상 계산
+    # 3개월콜 대상 (실제 검사일 기준)
+    three_months_ago = today - timedelta(days=90)
     happy_call_3month_total = Customer.objects.filter(
-        inspection_expiry_date__gte=target_3month - timedelta(days=1),
-        inspection_expiry_date__lte=target_3month + timedelta(days=1)
+        actual_inspection_date__gte=three_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=three_months_ago + timedelta(days=7)
     ).count()
 
-    # 6개월콜 대상 (검사만료일 6개월 전 ±1일)
-    target_6month = today + timedelta(days=180)  # 6개월 후
+    # 6개월콜 대상 (실제 검사일 기준)
+    six_months_ago = today - timedelta(days=180)
     happy_call_6month_total = Customer.objects.filter(
-        inspection_expiry_date__gte=target_6month - timedelta(days=1),
-        inspection_expiry_date__lte=target_6month + timedelta(days=1)
+        actual_inspection_date__gte=six_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=six_months_ago + timedelta(days=7)
     ).count()
 
-    # 12개월콜 대상 (검사만료일 12개월 전 ±1일)
-    target_12month = today + timedelta(days=365)  # 12개월 후
+    # 12개월콜 대상 (실제 검사일 기준)
+    twelve_months_ago = today - timedelta(days=365)
     happy_call_12month_total = Customer.objects.filter(
-        inspection_expiry_date__gte=target_12month - timedelta(days=1),
-        inspection_expiry_date__lte=target_12month + timedelta(days=1)
+        actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
     ).count()
 
-    # 18개월콜 대상 (검사만료일 18개월 전 ±1일)
-    target_18month = today + timedelta(days=548)  # 18개월 후 (365 + 183)
+    # 18개월콜 대상 (실제 검사일 기준) - 선택사항
+    eighteen_months_ago = today - timedelta(days=548)
     happy_call_18month_total = Customer.objects.filter(
-        inspection_expiry_date__gte=target_18month - timedelta(days=1),
-        inspection_expiry_date__lte=target_18month + timedelta(days=1)
+        actual_inspection_date__gte=eighteen_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=eighteen_months_ago + timedelta(days=7)
     ).count()
 
     # 오늘 통화한 고객 ID 목록
     today_called_customer_ids = today_calls.values_list('customer_id', flat=True).distinct()
 
-    # 각 해피콜의 남은 대상자 계산
+    # 각 해피콜의 남은 대상자 계산 (실제 검사일 기준)
     happy_call_3month_remaining = Customer.objects.filter(
-        inspection_expiry_date__gte=target_3month - timedelta(days=1),
-        inspection_expiry_date__lte=target_3month + timedelta(days=1)
+        actual_inspection_date__gte=three_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=three_months_ago + timedelta(days=7)
     ).exclude(id__in=today_called_customer_ids).count()
 
     happy_call_6month_remaining = Customer.objects.filter(
-        inspection_expiry_date__gte=target_6month - timedelta(days=1),
-        inspection_expiry_date__lte=target_6month + timedelta(days=1)
+        actual_inspection_date__gte=six_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=six_months_ago + timedelta(days=7)
     ).exclude(id__in=today_called_customer_ids).count()
 
     happy_call_12month_remaining = Customer.objects.filter(
-        inspection_expiry_date__gte=target_12month - timedelta(days=1),
-        inspection_expiry_date__lte=target_12month + timedelta(days=1)
+        actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
     ).exclude(id__in=today_called_customer_ids).count()
 
     happy_call_18month_remaining = Customer.objects.filter(
-        inspection_expiry_date__gte=target_18month - timedelta(days=1),
-        inspection_expiry_date__lte=target_18month + timedelta(days=1)
+        actual_inspection_date__gte=eighteen_months_ago - timedelta(days=7),
+        actual_inspection_date__lte=eighteen_months_ago + timedelta(days=7)
     ).exclude(id__in=today_called_customer_ids).count()
 
     # 완료된 수 계산
@@ -151,15 +153,14 @@ def dashboard(request):
     ).exclude(id__in=today_called_customer_ids).count()
     returning_customers_completed = returning_customers_total - returning_customers_remaining
     
-    # VIP 고객 (추가)
+    # VIP 고객
     vip_customers_total = Customer.objects.filter(customer_grade='vip').count()
     vip_customers_remaining = Customer.objects.filter(
         customer_grade='vip'
     ).exclude(id__in=today_called_customer_ids).count()
     vip_customers_completed = vip_customers_total - vip_customers_remaining
     
-    # ===== 오늘의 통화 대상자 통계 =====
-    # 해피콜 대상자들 (오늘 통화하지 않은)
+    # 오늘의 통화 대상자 통계
     happy_call_targets = (
         happy_call_3month_remaining + 
         happy_call_6month_remaining + 
@@ -192,31 +193,26 @@ def dashboard(request):
     # 단골 고객 수
     frequent_visitors = Customer.objects.filter(visit_count__gte=3).count()
     
-    # ===== 후속조치 관련 통계 =====
-    # 1. 후속조치가 필요한 전체 통화
+    # 후속조치 관련 통계
     followup_required_total = CallRecord.objects.filter(
         requires_follow_up=True,
         is_deleted=False
     ).count()
     
-    # 2. 완료된 후속조치
     followup_completed_total = CallRecord.objects.filter(
         requires_follow_up=True,
         follow_up_completed=True,
         is_deleted=False
     ).count()
     
-    # 3. 미완료 후속조치
     followup_pending = followup_required_total - followup_completed_total
     
-    # 4. 오늘 처리해야 할 후속조치
     followup_due_today = CallRecord.objects.filter(
         follow_up_date=today,
         follow_up_completed=False,
         is_deleted=False
     ).count()
     
-    # 5. 기한이 지난 후속조치
     followup_overdue = CallRecord.objects.filter(
         follow_up_date__lt=today,
         follow_up_completed=False,
@@ -224,21 +220,18 @@ def dashboard(request):
         is_deleted=False
     ).count()
     
-    # 6. 오늘 실행한 후속조치
     followup_calls_today = CallRecord.objects.filter(
         parent_call__isnull=False,
         call_date__date=today,
         is_deleted=False
     ).count()
     
-    # 7. 후속조치 완료율
     followup_completion_rate = 0
     if followup_required_total > 0:
         followup_completion_rate = round(
             (followup_completed_total / followup_required_total) * 100, 1
         )
     
-    # 8. 미완료 후속조치 목록
     pending_followup_list = CallRecord.objects.filter(
         requires_follow_up=True,
         follow_up_completed=False,
@@ -282,7 +275,6 @@ def dashboard(request):
         customer__customer_grade='vip'
     ).count()
     
-
     # Context 생성
     context = {
         'total_customers': total_customers,
@@ -377,7 +369,21 @@ def dashboard(request):
 @login_required
 def customer_list(request):
     """고객 목록 - 검색, 필터링, 페이징"""
-    customers = Customer.objects.all().order_by('-updated_at')
+    # 권한별 고객 필터링 추가
+    if hasattr(request.user, 'userprofile') and request.user.userprofile.role == 'agent':
+        # 상담원은 본인에게 배정된 고객 + 본인이 통화한 고객
+        assigned_customer_ids = CallAssignment.objects.filter(
+            assigned_to=request.user,
+            status__in=['pending', 'in_progress']
+        ).values_list('customer_id', flat=True)
+        
+        customers = Customer.objects.filter(
+            Q(id__in=assigned_customer_ids) |
+            Q(call_records__caller=request.user)
+        ).distinct().order_by('-updated_at')
+    else:
+        # 팀장, 관리자는 전체 고객
+        customers = Customer.objects.all().order_by('-updated_at')
     
     # 검색
     search_query = request.GET.get('search', '')
@@ -407,34 +413,34 @@ def customer_list(request):
     elif priority_filter == 'high':
         customers = customers.filter(priority='high')
     
-    # 해피콜 필터
+    # 해피콜 필터 (실제 검사일 기준으로 수정)
     happy_call_filter = request.GET.get('happy_call', '')
     if happy_call_filter:
         today = timezone.now().date()
         
         if happy_call_filter == '3month':
-            target_date = today + timedelta(days=90)
+            three_months_ago = today - timedelta(days=90)
             customers = customers.filter(
-                inspection_expiry_date__gte=target_date - timedelta(days=1),
-                inspection_expiry_date__lte=target_date + timedelta(days=1)
+                actual_inspection_date__gte=three_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=three_months_ago + timedelta(days=7)
             )
         elif happy_call_filter == '6month':
-            target_date = today + timedelta(days=180)
+            six_months_ago = today - timedelta(days=180)
             customers = customers.filter(
-                inspection_expiry_date__gte=target_date - timedelta(days=1),
-                inspection_expiry_date__lte=target_date + timedelta(days=1)
+                actual_inspection_date__gte=six_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=six_months_ago + timedelta(days=7)
             )
         elif happy_call_filter == '12month':
-            target_date = today + timedelta(days=365)
+            twelve_months_ago = today - timedelta(days=365)
             customers = customers.filter(
-                inspection_expiry_date__gte=target_date - timedelta(days=1),
-                inspection_expiry_date__lte=target_date + timedelta(days=1)
+                actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
             )
         elif happy_call_filter == '18month':
-            target_date = today + timedelta(days=548)
+            eighteen_months_ago = today - timedelta(days=548)
             customers = customers.filter(
-                inspection_expiry_date__gte=target_date - timedelta(days=1),
-                inspection_expiry_date__lte=target_date + timedelta(days=1)
+                actual_inspection_date__gte=eighteen_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=eighteen_months_ago + timedelta(days=7)
             )
     
     # 고객등급 필터
@@ -442,7 +448,7 @@ def customer_list(request):
     if grade_filter:
         customers = customers.filter(customer_grade=grade_filter)
     
-    # 재방문 고객 필터 (추가)
+    # 재방문 고객 필터
     visit_count_filter = request.GET.get('visit_count', '')
     if visit_count_filter:
         try:
@@ -451,7 +457,7 @@ def customer_list(request):
         except ValueError:
             pass
     
-    # 단골고객 필터 (기존)
+    # 단골고객 필터
     frequent_filter = request.GET.get('frequent', '')
     if frequent_filter == 'true':
         customers = customers.filter(visit_count__gte=3)
@@ -479,11 +485,11 @@ def customer_list(request):
         'status_filter': status_filter,
         'inspection_due': inspection_due,
         'happy_call_filter': happy_call_filter,
-        'visit_count_filter': visit_count_filter,  # 추가
+        'visit_count_filter': visit_count_filter,
         'status_choices': Customer.STATUS_CHOICES,
         'today': timezone.now().date(),
     }
-    context.update(sidebar_stats)  # 사이드바 통계 추가
+    context.update(sidebar_stats)
     
     return render(request, 'customer_list.html', context)
 
@@ -495,7 +501,7 @@ def customer_detail(request, pk):
     # 삭제되지 않은 통화 기록 중 부모 통화가 없는 것만 가져오기 (후속조치 제외)
     call_records = customer.call_records.filter(
         is_deleted=False,
-        parent_call__isnull=True  # 이 조건 추가
+        parent_call__isnull=True
     ).order_by('-call_date')[:20]
     
     # 사이드바 통계 추가
@@ -506,7 +512,7 @@ def customer_detail(request, pk):
         'call_records': call_records,
         'today': timezone.now().date(),
     }
-    context.update(sidebar_stats)  # 사이드바 통계 추가
+    context.update(sidebar_stats)
     
     return render(request, 'customer_detail.html', context)
 
@@ -590,7 +596,7 @@ def add_call_record(request, pk):
                     call_result=call_result,
                     interest_type=interest_type if interest_type else None,
                     notes=notes,
-                    customer_attitude=request.POST.get('customer_attitude') or None,  # 추가!
+                    customer_attitude=request.POST.get('customer_attitude') or None,
                     requires_follow_up=request.POST.get('requires_follow_up') == 'on',
                     follow_up_date=request.POST.get('follow_up_date') or None,
                     follow_up_notes=request.POST.get('follow_up_memo', ''),
@@ -625,9 +631,6 @@ def add_call_record(request, pk):
                         is_deleted=False
                     ).exclude(id=call_record.id)  # 방금 생성한 기록 제외
                     
-                    # follow_up_date 조건 제거 - 모든 미완료 후속조치를 완료 처리
-                    # follow_up_date__lte=today를 제거하면 날짜와 관계없이 처리
-                    
                     # 찾은 후속조치들 완료 처리
                     if pending_followups.exists():
                         count = pending_followups.count()
@@ -647,12 +650,26 @@ def add_call_record(request, pk):
                     customer.save()
                     print(f"고객 상태 업데이트: {customer.name} → {customer.status}")
                 
-                if request.POST.get('request_do_not_call') == 'on':
-                    customer.is_do_not_call = True
-                    customer.do_not_call_reason = "고객 요청"
-                    customer.do_not_call_date = timezone.now()
-                    customer.status = 'do_not_call'
-                    customer.save()
+                if request.POST.get('request_do_not_call') == 'on' and not customer.is_do_not_call:
+                    if request.user.userprofile.role == 'agent':
+                        # 상담원은 요청만
+                        customer.do_not_call_requested = True
+                        customer.do_not_call_requested_by = request.user
+                        customer.do_not_call_request_date = timezone.now()
+                        customer.save()
+                        
+                        # 통화 기록에 메모 추가
+                        call_record.notes += "\n[시스템] 고객이 통화금지를 요청하였습니다. 팀장 승인 대기중."
+                        call_record.save()
+                    else:
+                        # 팀장/관리자는 즉시 적용
+                        customer.is_do_not_call = True
+                        customer.do_not_call_reason = "고객 요청"
+                        customer.do_not_call_date = timezone.now()
+                        customer.do_not_call_approved_by = request.user
+                        customer.do_not_call_approved_date = timezone.now()
+                        customer.status = 'do_not_call'
+                        customer.save()
                     
                 elif call_record.call_result in ['no_answer', 'busy']:
                     # 부재중이나 통화중인 경우 상태 유지
@@ -763,7 +780,6 @@ def call_records(request):
     elif filter_type == 'follow_up':
         records = records.filter(follow_up_date__isnull=False)
     
-    
     # 통계 계산
     total_calls = records.count()
     connected_calls = records.filter(call_result='connected').count()
@@ -796,10 +812,11 @@ def call_records(request):
 
 
 @login_required
+@manager_required
 def upload_data(request):
     """CSV/Excel 데이터 업로드"""
     
-    def process_batch(batch_data):
+    def process_batch(batch_data, data_extract_date):
         """배치 데이터 처리"""
         batch_new = 0
         batch_updated = 0
@@ -811,6 +828,9 @@ def upload_data(request):
                     vehicle_number=vehicle_number,
                     defaults=customer_data
                 )
+
+                # 실제 검사일 계산 및 저장
+                customer.calculate_inspection_date(data_extract_date)
                 
                 # 우선순위와 태그 업데이트
                 customer.update_priority_tags()
@@ -830,7 +850,8 @@ def upload_data(request):
         form = CustomerUploadForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES['file']
-            
+            data_extract_date = form.cleaned_data['data_extract_date']  # 추출일 가져오기
+
             try:
                 # 파일 확장자에 따라 처리
                 if uploaded_file.name.endswith(('.xlsx', '.xls')):
@@ -928,9 +949,9 @@ def upload_data(request):
                             
                             batch_data.append((phone, vehicle_number, customer_data))
                             
-                            # 배치 처리
+                            # 배치 처리 - data_extract_date 전달
                             if len(batch_data) >= batch_size:
-                                batch_new, batch_updated = process_batch(batch_data)
+                                batch_new, batch_updated = process_batch(batch_data, data_extract_date)
                                 new_count += batch_new
                                 updated_count += batch_updated
                                 batch_data = []
@@ -941,7 +962,7 @@ def upload_data(request):
                     
                     # 남은 데이터 처리
                     if batch_data:
-                        batch_new, batch_updated = process_batch(batch_data)
+                        batch_new, batch_updated = process_batch(batch_data, data_extract_date)
                         new_count += batch_new
                         updated_count += batch_updated
                 
@@ -953,7 +974,7 @@ def upload_data(request):
                     new_records=new_count,
                     updated_records=updated_count,
                     error_count=error_count,
-                    notes=f"웹 업로드 완료. 총 {total_rows:,}행 처리"
+                    notes=f"웹 업로드 완료. 총 {total_rows:,}행 처리. 데이터 추출일: {data_extract_date}"
                 )
                 
                 messages.success(
@@ -1067,3 +1088,458 @@ def sidebar_stats_api(request):
         'pending_followups': pending_followups,
         'overdue_customers': overdue_customers
     })
+
+@login_required
+@ajax_manager_required
+def approve_do_not_call(request, pk):
+    """통화금지 요청 승인/거절"""
+    if request.method == 'POST':
+        customer = get_object_or_404(Customer, pk=pk)
+        action = request.POST.get('action')
+        
+        if action == 'approve':
+            customer.is_do_not_call = True
+            customer.do_not_call_approved_by = request.user
+            customer.do_not_call_approved_date = timezone.now()
+            customer.status = 'do_not_call'
+            customer.do_not_call_requested = False
+            customer.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': '통화금지가 승인되었습니다.'
+            })
+        
+        elif action == 'reject':
+            customer.do_not_call_requested = False
+            customer.do_not_call_requested_by = None
+            customer.do_not_call_request_date = None
+            customer.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': '통화금지 요청이 거절되었습니다.'
+            })
+    
+    return JsonResponse({'success': False, 'error': '잘못된 요청입니다.'})
+
+@login_required
+@manager_required
+def do_not_call_requests(request):
+    """통화금지 요청 목록"""
+    pending_requests = Customer.objects.filter(
+        do_not_call_requested=True,
+        is_do_not_call=False
+    ).select_related('do_not_call_requested_by').order_by('-do_not_call_request_date')
+    
+    sidebar_stats = get_sidebar_stats()
+    
+    context = {
+        'pending_requests': pending_requests,
+    }
+    context.update(sidebar_stats)
+    
+    return render(request, 'do_not_call_requests.html', context)
+
+
+@login_required
+@manager_required
+def call_assignment(request):
+    """콜 배정 관리 페이지"""
+    # 먼저 만료된 배정 자동 처리
+    expired_count = 0
+    old_assignments = CallAssignment.objects.filter(
+        status__in=['pending', 'in_progress'],
+        assigned_at__lte=timezone.now() - timedelta(days=7)
+    )
+    for assignment in old_assignments:
+        if assignment.auto_expire():
+            expired_count += 1
+    
+    if expired_count > 0:
+        messages.info(request, f'{expired_count}건의 배정이 7일 경과로 자동 만료되었습니다.')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'assign':
+            # 배정 처리
+            customer_ids = request.POST.getlist('customer_ids')
+            agent_id = request.POST.get('agent_id')
+            priority = request.POST.get('priority', 'normal')
+            due_date = request.POST.get('due_date')
+            notes = request.POST.get('notes', '')
+            
+            if not customer_ids or not agent_id:
+                messages.error(request, '고객과 상담원을 선택해주세요.')
+                return redirect('call_assignment')
+            
+            try:
+                with transaction.atomic():
+                    agent = User.objects.get(id=agent_id)
+                    assigned_count = 0
+                    already_assigned_count = 0
+                    skipped_count = 0
+                    
+                    for customer_id in customer_ids:
+                        customer = Customer.objects.select_for_update().get(id=customer_id)
+                        
+                        # 기존 배정 확인
+                        existing = CallAssignment.objects.filter(
+                            customer=customer,
+                            status__in=['pending', 'in_progress']
+                        ).select_for_update().first()
+                        
+                        if existing:
+                            if existing.assigned_to == agent:
+                                skipped_count += 1
+                                continue
+                            
+                            # 기존 배정 종료
+                            existing.status = 'cancelled'
+                            existing.completed_date = timezone.now()
+                            existing.notes += f"\n[재배정] {timezone.now().strftime('%Y-%m-%d %H:%M')} - 새 담당자: {agent.username}"
+                            existing.save()
+                            already_assigned_count += 1
+                        
+                        # 새 배정 생성
+                        CallAssignment.objects.create(
+                            customer=customer,
+                            assigned_to=agent,
+                            assigned_by=request.user,
+                            priority=priority,
+                            due_date=due_date if due_date else None,
+                            notes=notes + (f"\n[재배정] 이전 담당: {existing.assigned_to.username}" if existing else "")
+                        )
+                        assigned_count += 1
+                    
+                    # 결과 메시지
+                    message_parts = []
+                    if assigned_count > 0:
+                        message_parts.append(f'{assigned_count}명 배정 완료')
+                    if already_assigned_count > 0:
+                        message_parts.append(f'재배정 {already_assigned_count}명')
+                    if skipped_count > 0:
+                        message_parts.append(f'중복 제외 {skipped_count}명')
+                    
+                    if message_parts:
+                        messages.success(request, ' ('.join(message_parts) + ')')
+                    else:
+                        messages.warning(request, '배정할 고객이 없습니다.')
+                        
+            except User.DoesNotExist:
+                messages.error(request, '상담원을 찾을 수 없습니다.')
+            except Exception as e:
+                messages.error(request, f'배정 중 오류가 발생했습니다: {str(e)}')
+            
+            return redirect('call_assignment')
+        
+        elif action == 'reassign':
+            # 개별 재배정 처리
+            customer_id = request.POST.get('customer_id')
+            new_agent_id = request.POST.get('new_agent_id')
+            reason = request.POST.get('reason', '')
+            
+            try:
+                customer = Customer.objects.get(id=customer_id)
+                new_agent = User.objects.get(id=new_agent_id)
+                
+                # 기존 배정 종료
+                current_assignment = CallAssignment.objects.filter(
+                    customer=customer,
+                    status__in=['pending', 'in_progress']
+                ).first()
+                
+                if current_assignment:
+                    old_agent = current_assignment.assigned_to.username
+                    current_assignment.status = 'cancelled'
+                    current_assignment.completed_date = timezone.now()
+                    current_assignment.notes += f"\n[재배정] {timezone.now().strftime('%Y-%m-%d %H:%M')} - {reason}"
+                    current_assignment.save()
+                else:
+                    old_agent = '없음'
+                
+                # 새 배정 생성
+                CallAssignment.objects.create(
+                    customer=customer,
+                    assigned_to=new_agent,
+                    assigned_by=request.user,
+                    priority='normal',
+                    notes=f"[재배정] 이전 담당: {old_agent}\n사유: {reason}"
+                )
+                
+                messages.success(request, f'{customer.name} 고객을 {new_agent.username}에게 재배정했습니다.')
+                
+            except Exception as e:
+                messages.error(request, f'재배정 중 오류가 발생했습니다: {str(e)}')
+            
+            return redirect('call_assignment')
+    
+    # GET 요청 처리
+    today = timezone.now().date()
+    
+    # 탭 선택 (assigned: 배정된 고객, unassigned: 미배정 고객)
+    tab = request.GET.get('tab', 'unassigned')
+    
+    # 필터 파라미터
+    customer_type = request.GET.get('type', '')
+    grade_filter = request.GET.get('grade', '')
+    search_query = request.GET.get('search', '')
+    page_number = request.GET.get('page', 1)
+    
+    # 상담원 목록
+    agents = User.objects.filter(
+        userprofile__role='agent',
+        is_active=True
+    ).select_related('userprofile')
+    
+    # 배정 현황
+    active_assignments = CallAssignment.objects.filter(
+        status__in=['pending', 'in_progress']
+    ).select_related('customer', 'assigned_to', 'assigned_by').order_by('-assigned_at')
+    
+    # 현재 배정된 고객 ID 목록
+    assigned_customer_ids = active_assignments.values_list('customer_id', flat=True)
+    
+    # 전체 미배정 고객 수 계산 (필터 적용 전)
+    total_unassigned_customers = Customer.objects.filter(
+        is_active_customer=True,
+        is_do_not_call=False
+    ).exclude(id__in=assigned_customer_ids).count()
+    
+    # 기본 고객 쿼리
+    customers_query = Customer.objects.filter(
+        is_active_customer=True,
+        is_do_not_call=False
+    )
+    
+    # 탭에 따른 필터링
+    if tab == 'assigned':
+        # 배정된 고객만
+        customers_query = customers_query.filter(id__in=assigned_customer_ids)
+    else:
+        # 미배정 고객만 (기본)
+        customers_query = customers_query.exclude(id__in=assigned_customer_ids)
+    
+    # 검색 필터
+    if search_query:
+        customers_query = customers_query.filter(
+            Q(name__icontains=search_query) |
+            Q(phone__icontains=search_query) |
+            Q(vehicle_number__icontains=search_query)
+        )
+
+    # 필터 적용 및 날짜 정보 생성
+    filter_date_info = None
+    if customer_type:
+        if customer_type == 'overdue':
+            customers_query = customers_query.filter(
+                inspection_expiry_date__isnull=False,
+                inspection_expiry_date__lt=today
+            )
+            filter_date_info = f"검사만료일이 {today.strftime('%Y-%m-%d')} 이전"
+        elif customer_type == 'due_soon':
+            three_months_later = today + timedelta(days=90)
+            customers_query = customers_query.filter(
+                inspection_expiry_date__gte=today,
+                inspection_expiry_date__lte=three_months_later
+            )
+            filter_date_info = f"검사만료일이 {today.strftime('%Y-%m-%d')} ~ {three_months_later.strftime('%Y-%m-%d')} 사이"
+        elif customer_type == 'happy_3month':
+            # 실제 검사일 기준
+            three_months_ago = today - timedelta(days=90)
+            customers_query = customers_query.filter(
+                actual_inspection_date__gte=three_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=three_months_ago + timedelta(days=7)
+            )
+            filter_date_info = f"3개월 전 검사 고객 (검사일: {three_months_ago.strftime('%Y-%m-%d')} ±7일)"
+        elif customer_type == 'happy_6month':
+            # 실제 검사일 기준
+            six_months_ago = today - timedelta(days=180)
+            customers_query = customers_query.filter(
+                actual_inspection_date__gte=six_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=six_months_ago + timedelta(days=7)
+            )
+            filter_date_info = f"6개월 전 검사 고객 (검사일: {six_months_ago.strftime('%Y-%m-%d')} ±7일)"
+        elif customer_type == 'happy_12month':
+            # 실제 검사일 기준
+            twelve_months_ago = today - timedelta(days=365)
+            customers_query = customers_query.filter(
+                actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
+                actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
+            )
+            filter_date_info = f"12개월 전 검사 고객 (검사일: {twelve_months_ago.strftime('%Y-%m-%d')} ±7일)"
+        elif customer_type == 'vip':
+            customers_query = customers_query.filter(customer_grade='vip')
+            filter_date_info = "VIP 등급 고객"
+        elif customer_type == 'frequent':
+            customers_query = customers_query.filter(visit_count__gte=3)
+            filter_date_info = "단골 고객 (방문 3회 이상)"
+        elif customer_type == 'pending':
+            customers_query = customers_query.filter(status='pending')
+            filter_date_info = "미접촉 고객"
+    
+    if grade_filter:
+        customers_query = customers_query.filter(customer_grade=grade_filter)
+    
+    # 정렬
+    sort_by = request.GET.get('sort', 'priority')
+    if sort_by == 'expiry':
+        customers_query = customers_query.order_by('inspection_expiry_date')
+    elif sort_by == 'visit':
+        customers_query = customers_query.order_by('-visit_count')
+    elif sort_by == 'name':
+        customers_query = customers_query.order_by('name')
+    else:
+        customers_query = customers_query.order_by('-is_inspection_overdue', '-priority', 'updated_at')
+    
+    # 필터링된 고객 수
+    filtered_customers_count = customers_query.count()
+    
+    # 페이지네이션
+    paginator = Paginator(customers_query, 50)
+    page_obj = paginator.get_page(page_number)
+    
+    # 현재 페이지의 고객 ID 추출
+    customer_ids = [customer.id for customer in page_obj]
+    
+    # 배정 정보 조회 및 처리
+    current_assignments = CallAssignment.objects.filter(
+        customer_id__in=customer_ids,
+        status__in=['pending', 'in_progress']
+    ).select_related('assigned_to').values(
+        'customer_id', 'assigned_to__username', 'status', 'assigned_at', 'due_date'
+    )
+    
+    assignment_dict = {}
+    for assignment in current_assignments:
+        days_passed = (timezone.now().date() - assignment['assigned_at'].date()).days
+        assignment_dict[assignment['customer_id']] = {
+            'assigned_to_username': assignment['assigned_to__username'],
+            'status': assignment['status'],
+            'assigned_at': assignment['assigned_at'],
+            'due_date': assignment['due_date'],
+            'days_passed': days_passed,
+            'is_overdue': days_passed >= 7
+        }
+    
+    # 각 고객에 배정 정보 추가
+    for customer in page_obj:
+        customer.current_assignment_info = assignment_dict.get(customer.id)
+    
+    # 상담원별 통계
+    agent_stats = []
+    for agent in agents:
+        stats = {
+            'agent': agent,
+            'pending_count': active_assignments.filter(assigned_to=agent, status='pending').count(),
+            'in_progress_count': active_assignments.filter(assigned_to=agent, status='in_progress').count(),
+            'completed_today': CallAssignment.objects.filter(
+                assigned_to=agent,
+                status='completed',
+                completed_date__date=today
+            ).count(),
+            'calls_today': CallRecord.objects.filter(
+                caller=agent,
+                call_date__date=today,
+                is_deleted=False
+            ).count()
+        }
+        agent_stats.append(stats)
+    
+    # 배정 통계
+    assignment_stats = {
+        'total_assigned': active_assignments.count(),
+        'pending': active_assignments.filter(status='pending').count(),
+        'in_progress': active_assignments.filter(status='in_progress').count(),
+        'completed_today': CallAssignment.objects.filter(
+            status='completed',
+            completed_date__date=today
+        ).count(),
+        'overdue': active_assignments.filter(
+            assigned_at__lte=timezone.now() - timedelta(days=7)
+        ).count()
+    }
+    
+    sidebar_stats = get_sidebar_stats()
+    
+    # context에 추가
+    context = {
+        'agents': agents,
+        'assignments': active_assignments[:50],
+        'assignable_customers': page_obj,
+        'total_customers': total_unassigned_customers,
+        'filtered_customers_count': filtered_customers_count,
+        'agent_stats': agent_stats,
+        'assignment_stats': assignment_stats,
+        'today': today,
+        'tab': tab,
+        'customer_type': customer_type,
+        'grade_filter': grade_filter,
+        'search_query': search_query,
+        'filter_date_info': filter_date_info,
+    }
+    context.update(sidebar_stats)
+    
+    return render(request, 'call_assignment.html', context)
+
+
+@login_required
+def my_assignments(request):
+    """내 배정 목록 (상담원용)"""
+    assignments = CallAssignment.objects.filter(
+        assigned_to=request.user,
+        status__in=['pending', 'in_progress']
+    ).select_related('customer', 'assigned_by').order_by('priority', 'due_date')
+    
+    # 오늘 처리한 배정
+    today = timezone.now().date()
+    completed_today = CallAssignment.objects.filter(
+        assigned_to=request.user,
+        status='completed',
+        completed_date__date=today
+    ).count()
+    
+    sidebar_stats = get_sidebar_stats()
+    
+    context = {
+        'assignments': assignments,
+        'completed_today': completed_today,
+        'today': today,
+    }
+    context.update(sidebar_stats)
+    
+    return render(request, 'my_assignments.html', context)
+
+
+@login_required
+def update_assignment_status(request, assignment_id):
+    """배정 상태 업데이트 (AJAX)"""
+    if request.method == 'POST':
+        try:
+            assignment = get_object_or_404(CallAssignment, id=assignment_id)
+            
+            # 권한 확인
+            if assignment.assigned_to != request.user and not request.user.userprofile.is_manager_or_above():
+                return JsonResponse({'success': False, 'error': '권한이 없습니다.'})
+            
+            new_status = request.POST.get('status')
+            if new_status in ['pending', 'in_progress', 'completed', 'cancelled']:
+                assignment.status = new_status
+                
+                if new_status == 'completed':
+                    assignment.completed_date = timezone.now()
+                
+                assignment.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': '상태가 업데이트되었습니다.'
+                })
+            else:
+                return JsonResponse({'success': False, 'error': '잘못된 상태값입니다.'})
+                
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'POST 요청만 허용됩니다.'})
