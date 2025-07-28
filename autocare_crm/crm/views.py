@@ -380,10 +380,10 @@ def customer_list(request):
         customers = Customer.objects.filter(
             Q(id__in=assigned_customer_ids) |
             Q(call_records__caller=request.user)
-        ).distinct().order_by('-updated_at')
+        ).distinct()
     else:
         # 팀장, 관리자는 전체 고객
-        customers = Customer.objects.all().order_by('-updated_at')
+        customers = Customer.objects.all()
     
     # 검색
     search_query = request.GET.get('search', '')
@@ -413,7 +413,7 @@ def customer_list(request):
     elif priority_filter == 'high':
         customers = customers.filter(priority='high')
     
-    # 해피콜 필터 (실제 검사일 기준으로 수정)
+    # 해피콜 필터 (실제 검사일 기준으로 수정 - ±1일)
     happy_call_filter = request.GET.get('happy_call', '')
     if happy_call_filter:
         today = timezone.now().date()
@@ -421,26 +421,26 @@ def customer_list(request):
         if happy_call_filter == '3month':
             three_months_ago = today - timedelta(days=90)
             customers = customers.filter(
-                actual_inspection_date__gte=three_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=three_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=three_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=three_months_ago + timedelta(days=1)
             )
         elif happy_call_filter == '6month':
             six_months_ago = today - timedelta(days=180)
             customers = customers.filter(
-                actual_inspection_date__gte=six_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=six_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=six_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=six_months_ago + timedelta(days=1)
             )
         elif happy_call_filter == '12month':
             twelve_months_ago = today - timedelta(days=365)
             customers = customers.filter(
-                actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=twelve_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=twelve_months_ago + timedelta(days=1)
             )
         elif happy_call_filter == '18month':
             eighteen_months_ago = today - timedelta(days=548)
             customers = customers.filter(
-                actual_inspection_date__gte=eighteen_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=eighteen_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=eighteen_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=eighteen_months_ago + timedelta(days=1)
             )
     
     # 고객등급 필터
@@ -471,6 +471,14 @@ def customer_list(request):
             inspection_expiry_date__lte=three_months_later
         )
     
+    # 정렬 - 기본값은 실제 검사일 오래된 순
+    # actual_inspection_date로 정렬 (NULL 값은 뒤로)
+    from django.db.models import F
+    customers = customers.order_by(
+        F('actual_inspection_date').asc(nulls_last=True),
+        F('inspection_expiry_date').asc(nulls_last=True)
+    )
+    
     # 페이징
     paginator = Paginator(customers, 50)
     page_number = request.GET.get('page')
@@ -492,7 +500,6 @@ def customer_list(request):
     context.update(sidebar_stats)
     
     return render(request, 'customer_list.html', context)
-
 
 @login_required
 def customer_detail(request, pk):
@@ -723,7 +730,7 @@ def call_records(request):
             queryset=CallRecord.objects.filter(is_deleted=False).select_related('caller')
         )
     ).order_by('-call_date')
-    
+
     # 검색 필터 추가
     search_query = request.GET.get('search', '')
     if search_query:
@@ -1352,29 +1359,29 @@ def call_assignment(request):
             )
             filter_date_info = f"검사만료일이 {today.strftime('%Y-%m-%d')} ~ {three_months_later.strftime('%Y-%m-%d')} 사이"
         elif customer_type == 'happy_3month':
-            # 실제 검사일 기준
+            # 실제 검사일 기준 - ±1일로 변경
             three_months_ago = today - timedelta(days=90)
             customers_query = customers_query.filter(
-                actual_inspection_date__gte=three_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=three_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=three_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=three_months_ago + timedelta(days=1)
             )
-            filter_date_info = f"3개월 전 검사 고객 (검사일: {three_months_ago.strftime('%Y-%m-%d')} ±7일)"
+            filter_date_info = f"3개월 전 검사 고객 (검사일: {three_months_ago.strftime('%Y-%m-%d')} ±1일)"
         elif customer_type == 'happy_6month':
-            # 실제 검사일 기준
+            # 실제 검사일 기준 - ±1일로 변경
             six_months_ago = today - timedelta(days=180)
             customers_query = customers_query.filter(
-                actual_inspection_date__gte=six_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=six_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=six_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=six_months_ago + timedelta(days=1)
             )
-            filter_date_info = f"6개월 전 검사 고객 (검사일: {six_months_ago.strftime('%Y-%m-%d')} ±7일)"
+            filter_date_info = f"6개월 전 검사 고객 (검사일: {six_months_ago.strftime('%Y-%m-%d')} ±1일)"
         elif customer_type == 'happy_12month':
-            # 실제 검사일 기준
+            # 실제 검사일 기준 - ±1일로 변경
             twelve_months_ago = today - timedelta(days=365)
             customers_query = customers_query.filter(
-                actual_inspection_date__gte=twelve_months_ago - timedelta(days=7),
-                actual_inspection_date__lte=twelve_months_ago + timedelta(days=7)
+                actual_inspection_date__gte=twelve_months_ago - timedelta(days=1),
+                actual_inspection_date__lte=twelve_months_ago + timedelta(days=1)
             )
-            filter_date_info = f"12개월 전 검사 고객 (검사일: {twelve_months_ago.strftime('%Y-%m-%d')} ±7일)"
+            filter_date_info = f"12개월 전 검사 고객 (검사일: {twelve_months_ago.strftime('%Y-%m-%d')} ±1일)"
         elif customer_type == 'vip':
             customers_query = customers_query.filter(customer_grade='vip')
             filter_date_info = "VIP 등급 고객"
@@ -1388,16 +1395,18 @@ def call_assignment(request):
     if grade_filter:
         customers_query = customers_query.filter(customer_grade=grade_filter)
     
-    # 정렬
-    sort_by = request.GET.get('sort', 'priority')
-    if sort_by == 'expiry':
-        customers_query = customers_query.order_by('inspection_expiry_date')
+    # 정렬 - 기본값을 오래된 날짜순으로 변경
+    sort_by = request.GET.get('sort', 'oldest')
+    if sort_by == 'expiry' or sort_by == 'oldest':
+        customers_query = customers_query.order_by('actual_inspection_date', 'inspection_expiry_date')
     elif sort_by == 'visit':
         customers_query = customers_query.order_by('-visit_count')
     elif sort_by == 'name':
         customers_query = customers_query.order_by('name')
-    else:
+    elif sort_by == 'priority':
         customers_query = customers_query.order_by('-is_inspection_overdue', '-priority', 'updated_at')
+    else:
+        customers_query = customers_query.order_by('actual_inspection_date', 'inspection_expiry_date')
     
     # 필터링된 고객 수
     filtered_customers_count = customers_query.count()
@@ -1488,6 +1497,7 @@ def call_assignment(request):
     context.update(sidebar_stats)
     
     return render(request, 'call_assignment.html', context)
+
 
 
 @login_required
