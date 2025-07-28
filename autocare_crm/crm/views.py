@@ -1068,31 +1068,3 @@ def sidebar_stats_api(request):
         'pending_followups': pending_followups,
         'overdue_customers': overdue_customers
     })
-    """사이드바 통계 API"""
-    today = timezone.now().date()
-    
-    # 오늘 통화 수
-    today_total_calls = CallRecord.objects.filter(
-        call_date__date=today,
-        is_deleted=False
-    ).count()
-    
-    # 미완료 후속조치
-    pending_follow_ups = CallRecord.objects.filter(
-        requires_follow_up=True,
-        follow_up_completed=False,
-        is_deleted=False
-    ).count()
-    
-    # 검사만료 고객
-    overdue_customers = Customer.objects.filter(
-        inspection_expiry_date__isnull=False,
-        inspection_expiry_date__lt=today
-    ).count()
-    
-    return JsonResponse({
-        'success': True,
-        'today_calls': today_total_calls,  # JavaScript와 일치하도록 수정
-        'pending_followups': pending_follow_ups,  # JavaScript와 일치하도록 수정
-        'overdue_customers': overdue_customers  # 이미 일치함
-    })
