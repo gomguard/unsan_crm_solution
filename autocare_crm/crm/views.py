@@ -715,8 +715,14 @@ def add_call_record(request, pk):
 def call_records(request):
     """통화 기록 목록"""
     records = CallRecord.objects.filter(
-        is_deleted=False
-    ).select_related('customer', 'caller').order_by('-call_date')
+        is_deleted=False,
+        parent_call__isnull=True  # 후속조치가 아닌 원본 통화만
+    ).select_related('customer', 'caller').prefetch_related(
+        Prefetch(
+            'child_calls',
+            queryset=CallRecord.objects.filter(is_deleted=False).select_related('caller')
+        )
+    ).order_by('-call_date')
     
     # 검색 필터 추가
     search_query = request.GET.get('search', '')

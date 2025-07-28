@@ -292,36 +292,21 @@
             </div>
             
             <!-- 후속조치 기록 -->
-            {% if record.follow_ups.exists %}
+            {% if record.child_calls.exists %}
             <div class="mt-4 pl-10">
                 <div class="text-xs font-medium text-gray-500 mb-2">
                     <i class="bi bi-arrow-return-right mr-1"></i>후속조치 기록
                 </div>
-                {% for followup in record.follow_ups.all %}
+                {% for child_call in record.child_calls.all %}
                 <div class="mb-2 p-3 bg-gray-50 rounded-lg border-l-4 border-primary">
                     <div class="flex justify-between items-start mb-1">
                         <div class="text-xs text-gray-500">
-                            <i class="bi bi-person mr-1"></i>{{ followup.created_by.username }}
+                            <i class="bi bi-person mr-1"></i>{{ child_call.caller.username }}
                             <span class="mx-2">·</span>
-                            {{ followup.created_at|date:"m/d H:i" }}
+                            {{ child_call.call_date|date:"m/d H:i" }}
                         </div>
-                        {% if followup.action_type %}
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700">
-                                {% if followup.action_type == 'callback_scheduled' %}재통화 예약
-                                {% elif followup.action_type == 'visit_scheduled' %}방문 예약
-                                {% elif followup.action_type == 'quote_sent' %}견적 발송
-                                {% elif followup.action_type == 'converted' %}계약 성사
-                                {% elif followup.action_type == 'closed' %}종료
-                                {% endif %}
-                            </span>
-                        {% endif %}
                     </div>
-                    <p class="text-sm text-gray-700">{{ followup.notes }}</p>
-                    {% if followup.scheduled_date %}
-                        <div class="mt-1 text-xs text-gray-500">
-                            <i class="bi bi-calendar mr-1"></i>예정일: {{ followup.scheduled_date }}
-                        </div>
-                    {% endif %}
+                    <p class="text-sm text-gray-700">{{ child_call.notes|slice:"10:" }}</p>
                 </div>
                 {% endfor %}
             </div>
