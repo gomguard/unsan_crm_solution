@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+from django.contrib.auth.forms import ReadOnlyPasswordHashField
+from django.utils.html import format_html
+from django.urls import reverse
 from .models import Customer, CallRecord, UploadHistory, UserProfile, CallFollowUp, CallAssignment
 
 
@@ -14,7 +17,7 @@ class UserProfileInline(admin.StackedInline):
 # User Admin 확장
 class UserAdmin(BaseUserAdmin):
     inlines = (UserProfileInline,)
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'get_role', 'get_team')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'get_role', 'get_team', 'password_change_link')
     
     def get_role(self, obj):
         if hasattr(obj, 'userprofile'):
@@ -27,6 +30,25 @@ class UserAdmin(BaseUserAdmin):
             return obj.userprofile.team or '-'
         return '-'
     get_team.short_description = '팀'
+    
+    def password_change_link(self, obj):
+        """비밀번호 변경 링크 추가"""
+        url = reverse('admin:auth_user_password_change', args=[obj.pk])
+        return format_html('<a href="{}">비밀번호 변경</a>', url)
+    password_change_link.short_description = '비밀번호'
+    
+    # 상세 페이지에서 비밀번호 필드 커스터마이징
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj:  # 기존 사용자 편집 시
+            # 비밀번호 필드를 읽기 전용으로 만들고 변경 링크 표시
+            form.base_fields['password'].widget = ReadOnlyPasswordHashField()
+            form.base_fields['password'].help_text = format_html(
+                '원시 비밀번호는 저장되지 않으므로 이 사용자의 비밀번호를 볼 수 없습니다. '
+                '<a href="{}">이 양식을 사용하여 비밀번호를 변경할 수 있습니다</a>.',
+                reverse('admin:auth_user_password_change', args=[obj.pk])
+            )
+        return form
 
 # 기존 User Admin 제거하고 새로운 것으로 등록
 admin.site.unregister(User)
@@ -97,9 +119,9 @@ class CallFollowUpAdmin(admin.ModelAdmin):
 @admin.register(CallAssignment)
 class CallAssignmentAdmin(admin.ModelAdmin):
     list_display = ('customer', 'assigned_to', 'assigned_by', 'assigned_at', 'priority', 'status', 'due_date')
-    list_filter = ('status', 'priority', 'assigned_at', 'due_date')  # assigned_date를 assigned_at으로 변경
+    list_filter = ('status', 'priority', 'assigned_at', 'due_date')
     search_fields = ('customer__name', 'customer__phone', 'assigned_to__username', 'notes')
-    date_hierarchy = 'assigned_at'  # assigned_date를 assigned_at으로 변경
+    date_hierarchy = 'assigned_at'
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
