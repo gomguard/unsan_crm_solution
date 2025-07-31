@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
-from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.utils.html import format_html
 from django.urls import reverse
 from .models import Customer, CallRecord, UploadHistory, UserProfile, CallFollowUp, CallAssignment
@@ -33,22 +32,17 @@ class UserAdmin(BaseUserAdmin):
     
     def password_change_link(self, obj):
         """비밀번호 변경 링크 추가"""
-        url = reverse('admin:auth_user_password_change', args=[obj.pk])
-        return format_html('<a href="{}">비밀번호 변경</a>', url)
+        try:
+            # Django 버전에 따라 URL 패턴이 다를 수 있음
+            url = f'/admin/auth/user/{obj.pk}/password/'
+            return format_html('<a href="{}">비밀번호 변경</a>', url)
+        except:
+            return '-'
     password_change_link.short_description = '비밀번호'
     
-    # 상세 페이지에서 비밀번호 필드 커스터마이징
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if obj:  # 기존 사용자 편집 시
-            # 비밀번호 필드를 읽기 전용으로 만들고 변경 링크 표시
-            form.base_fields['password'].widget = ReadOnlyPasswordHashField()
-            form.base_fields['password'].help_text = format_html(
-                '원시 비밀번호는 저장되지 않으므로 이 사용자의 비밀번호를 볼 수 없습니다. '
-                '<a href="{}">이 양식을 사용하여 비밀번호를 변경할 수 있습니다</a>.',
-                reverse('admin:auth_user_password_change', args=[obj.pk])
-            )
-        return form
+    # 비밀번호 변경 권한 추가
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj)
 
 # 기존 User Admin 제거하고 새로운 것으로 등록
 admin.site.unregister(User)
