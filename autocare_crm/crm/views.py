@@ -1722,6 +1722,12 @@ def team_dashboard(request):
             elif time_diff.seconds < 3600:  # 1시간
                 status = 'idle'
         
+        # 팀장 여부 확인
+        is_manager = hasattr(agent, 'userprofile') and agent.userprofile.role == 'manager'
+        
+        # 정렬을 위한 sort_key 추가 (팀장은 999999로 설정하여 항상 앞에 오도록)
+        sort_key = 999999 if is_manager else achievement_rate
+        
         agent_performances.append({
             'agent': agent,
             'total_calls': total_calls,
@@ -1738,7 +1744,9 @@ def team_dashboard(request):
             'daily_target': daily_target,
             'achievement_rate': achievement_rate,
             'status': status,
-            'last_activity': last_activity
+            'last_activity': last_activity,
+            'is_manager': is_manager,
+            'sort_key': sort_key
         })
     
     # 팀 전체 통계 (오늘 기준)
