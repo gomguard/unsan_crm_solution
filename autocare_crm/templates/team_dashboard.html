@@ -1,0 +1,423 @@
+{% extends 'base.html' %}
+
+{% block title %}팀 대시보드 - {{ team_name|default:"전체" }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.performance-card {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+.performance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.performance-excellent { border-left-color: #10b981; }
+.performance-good { border-left-color: #3b82f6; }
+.performance-average { border-left-color: #f59e0b; }
+.performance-poor { border-left-color: #ef4444; }
+
+.status-online { background-color: #10b981; }
+.status-offline { background-color: #6b7280; }
+.status-idle { background-color: #f59e0b; }
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 헤더 -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+            <i class="bi bi-speedometer2 mr-2"></i>
+            팀 대시보드
+            {% if team_name %}
+                <span class="ml-3 text-lg font-normal text-gray-600">{{ team_name }} 팀</span>
+            {% endif %}
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">실시간 팀원 성과 모니터링</p>
+    </div>
+    
+    <!-- 날짜 필터 -->
+    <div class="mt-4 sm:mt-0">
+        <form method="get" class="flex gap-2">
+            <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <span class="self-center text-gray-500">~</span>
+            <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <button type="submit" class="px-4 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary-hover">
+                조회
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 팀 전체 요약 -->
+<div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold text-gray-900">{{ team_stats.total_agents }}</div>
+            <div class="text-xs text-gray-500 mt-1">전체 상담원</div>
+            <div class="text-xs text-green-600 mt-1">
+                <i class="bi bi-circle-fill text-green-500 animate-pulse"></i>
+                {{ team_stats.active_agents }}명 활동중
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold text-blue-600">{{ team_stats.total_calls }}</div>
+            <div class="text-xs text-gray-500 mt-1">총 통화</div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold text-green-600">{{ team_stats.total_connected }}</div>
+            <div class="text-xs text-gray-500 mt-1">통화 성공</div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold text-purple-600">{{ team_stats.total_interested }}</div>
+            <div class="text-xs text-gray-500 mt-1">관심 고객</div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold {% if team_stats.avg_success_rate >= 70 %}text-green-600{% elif team_stats.avg_success_rate >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                {{ team_stats.avg_success_rate }}%
+            </div>
+            <div class="text-xs text-gray-500 mt-1">평균 성공률</div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-center">
+            <div class="text-2xl font-bold {% if team_stats.avg_achievement_rate >= 100 %}text-green-600{% elif team_stats.avg_achievement_rate >= 80 %}text-blue-600{% elif team_stats.avg_achievement_rate >= 60 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                {{ team_stats.avg_achievement_rate }}%
+            </div>
+            <div class="text-xs text-gray-500 mt-1">목표 달성률</div>
+        </div>
+    </div>
+</div>
+
+<!-- 시간대별 통화 분포 -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">오늘의 시간대별 통화 분포</h2>
+    <div class="grid grid-cols-10 gap-2">
+        {% for hour_item in hourly_data %}
+        <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">{{ hour_item.hour_display }}</div>
+            <div class="bg-gray-200 rounded-lg overflow-hidden" style="height: 100px; position: relative;">
+                <div class="absolute bottom-0 left-0 right-0 bg-primary transition-all duration-300"
+                     style="height: {{ hour_item.percentage }}%">
+                </div>
+            </div>
+            <div class="text-xs font-medium mt-1">{{ hour_item.count }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 상담원별 성과 카드 -->
+<div class="mb-6">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">상담원별 실시간 성과</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for performance in agent_performances %}
+        <div class="bg-white rounded-lg shadow-sm performance-card 
+            {% if performance.achievement_rate >= 100 %}performance-excellent
+            {% elif performance.achievement_rate >= 80 %}performance-good
+            {% elif performance.achievement_rate >= 60 %}performance-average
+            {% else %}performance-poor{% endif %}">
+            
+            <!-- 헤더 -->
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="relative">
+                            <div class="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                <i class="bi bi-person-circle text-gray-600"></i>
+                            </div>
+                            <div class="absolute -bottom-1 -right-1 h-3 w-3 rounded-full 
+                                {% if performance.status == 'online' %}status-online animate-pulse
+                                {% else %}status-offline{% endif %}">
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-gray-900">{{ performance.agent.username }}</p>
+                            <p class="text-xs text-gray-500">
+                                {% if performance.agent.userprofile.team %}
+                                    {{ performance.agent.userprofile.team }}
+                                {% endif %}
+                                {% if performance.status == 'online' %}
+                                    <span class="text-green-600 ml-1">● 활동중</span>
+                                {% else %}
+                                    <span class="text-gray-400 ml-1">● 오프라인</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <button class="text-gray-400 hover:text-gray-600" onclick="showAgentDetail({{ performance.agent.id }})">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 성과 지표 -->
+            <div class="p-4">
+                <!-- 목표 달성률 -->
+                <div class="mb-4">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-gray-600">오늘 목표 달성률</span>
+                        <span class="text-sm font-bold 
+                            {% if performance.achievement_rate >= 100 %}text-green-600
+                            {% elif performance.achievement_rate >= 80 %}text-blue-600
+                            {% elif performance.achievement_rate >= 60 %}text-yellow-600
+                            {% else %}text-red-600{% endif %}">
+                            {{ performance.achievement_rate }}%
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full transition-all duration-300
+                            {% if performance.achievement_rate >= 100 %}bg-green-500
+                            {% elif performance.achievement_rate >= 80 %}bg-blue-500
+                            {% elif performance.achievement_rate >= 60 %}bg-yellow-500
+                            {% else %}bg-red-500{% endif %}"
+                            style="width: {% if performance.achievement_rate > 100 %}100%{% else %}{{ performance.achievement_rate }}%{% endif %}">
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        오늘: {{ performance.today_total }} / {{ performance.daily_target }} 건
+                    </div>
+                </div>
+                
+                <!-- 통화 통계 -->
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="text-center p-2 bg-gray-50 rounded">
+                        <div class="text-lg font-bold text-gray-900">{{ performance.today_total }}</div>
+                        <div class="text-xs text-gray-500">오늘 통화</div>
+                    </div>
+                    <div class="text-center p-2 bg-gray-50 rounded">
+                        <div class="text-lg font-bold text-green-600">{{ performance.today_connected }}</div>
+                        <div class="text-xs text-gray-500">오늘 성공</div>
+                    </div>
+                </div>
+                
+                <!-- 상세 지표 -->
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">성공률</span>
+                        <span class="font-medium">{{ performance.success_rate }}%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">관심 고객</span>
+                        <span class="font-medium text-purple-600">{{ performance.interested_calls }}건</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">후속조치</span>
+                        <span class="font-medium">{{ performance.followup_completed }}/{{ performance.followup_required }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">오늘 배정</span>
+                        <span class="font-medium">{{ performance.assigned_today }}건</span>
+                    </div>
+                </div>
+                
+                <!-- 해피콜 성과 -->
+                {% if performance.happy_calls %}
+                <div class="mt-3 pt-3 border-t border-gray-200">
+                    <p class="text-xs text-gray-600 mb-2">해피콜 성과</p>
+                    <div class="flex justify-around">
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500">3개월</div>
+                            <div class="text-sm font-bold">{{ performance.happy_calls.3month }}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500">6개월</div>
+                            <div class="text-sm font-bold">{{ performance.happy_calls.6month }}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500">12개월</div>
+                            <div class="text-sm font-bold">{{ performance.happy_calls.12month }}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500">18개월</div>
+                            <div class="text-sm font-bold">{{ performance.happy_calls.18month }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 미완료 후속조치 & 최근 통화 -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 미완료 후속조치 -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">
+                <i class="bi bi-exclamation-triangle text-orange-500 mr-2"></i>
+                미완료 후속조치
+            </h2>
+        </div>
+        <div class="p-6">
+            {% if pending_followups %}
+            <div class="space-y-3">
+                {% for call in pending_followups %}
+                <div class="flex items-start justify-between p-3 bg-orange-50 rounded-lg">
+                    <div class="flex-1">
+                        <div class="flex items-center mb-1">
+                            <span class="text-sm font-medium text-gray-900">{{ call.customer.name }}</span>
+                            <span class="ml-2 text-xs text-gray-500">{{ call.customer.phone }}</span>
+                        </div>
+                        <p class="text-xs text-gray-600">{{ call.notes|truncatewords:20 }}</p>
+                        <div class="flex items-center mt-1">
+                            <span class="text-xs text-gray-500">
+                                <i class="bi bi-person mr-1"></i>{{ call.caller.username }}
+                            </span>
+                            {% if call.follow_up_date %}
+                            <span class="ml-3 text-xs {% if call.follow_up_date < today %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">
+                                <i class="bi bi-calendar mr-1"></i>{{ call.follow_up_date }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <a href="{% url 'customer_detail' call.customer.pk %}" 
+                       class="ml-3 text-primary hover:text-primary-hover">
+                        <i class="bi bi-arrow-right-circle"></i>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-8">
+                <i class="bi bi-check-circle text-3xl text-green-500"></i><br>
+                미완료 후속조치가 없습니다
+            </p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- 최근 팀 통화 기록 -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">
+                <i class="bi bi-telephone text-blue-500 mr-2"></i>
+                최근 팀 통화 기록
+            </h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-2">
+                {% for call in recent_team_calls|slice:":10" %}
+                <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div class="flex-1">
+                        <div class="flex items-center">
+                            <span class="text-sm font-medium text-gray-900">{{ call.customer.name }}</span>
+                            {% if call.call_result == 'connected' %}
+                                <span class="ml-2 inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-800">통화성공</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            <i class="bi bi-person mr-1"></i>{{ call.caller.username }}
+                            <span class="mx-2">·</span>
+                            {{ call.call_date|date:"H:i" }}
+                        </div>
+                    </div>
+                    <a href="{% url 'customer_detail' call.customer.pk %}" 
+                       class="text-gray-400 hover:text-gray-600">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 상담원 상세 모달 -->
+<div id="agentDetailModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">상담원 상세 성과</h3>
+            <button onclick="closeAgentDetail()" class="text-gray-400 hover:text-gray-600">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div id="agentDetailContent">
+            <!-- AJAX로 로드됨 -->
+        </div>
+    </div>
+</div>
+
+<script>
+// 자동 새로고침 (30초마다)
+let refreshInterval = setInterval(() => {
+    fetchTeamPerformance();
+}, 30000);
+
+function fetchTeamPerformance() {
+    fetch('{% url "team_performance_api" %}?team={{ team_name|default:"" }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updatePerformanceCards(data.data);
+            }
+        });
+}
+
+function updatePerformanceCards(data) {
+    // 성과 카드 업데이트 로직
+    console.log('Performance updated:', data);
+}
+
+function showAgentDetail(agentId) {
+    document.getElementById('agentDetailModal').classList.remove('hidden');
+    document.getElementById('agentDetailContent').innerHTML = '<div class="text-center py-8"><i class="bi bi-arrow-repeat animate-spin text-3xl text-primary"></i></div>';
+    
+    fetch(`{% url 'agent_performance_api' 0 %}`.replace('0', agentId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderAgentDetail(data);
+            }
+        });
+}
+
+function renderAgentDetail(data) {
+    const content = `
+        <div class="space-y-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-sm font-medium text-gray-900 mb-2">
+                    ${data.agent.name} (${data.agent.team || '팀 미지정'})
+                </h4>
+                <canvas id="agentChart"></canvas>
+            </div>
+        </div>
+    `;
+    document.getElementById('agentDetailContent').innerHTML = content;
+    
+    // 차트 그리기 (Chart.js 필요)
+}
+
+function closeAgentDetail() {
+    document.getElementById('agentDetailModal').classList.add('hidden');
+}
+
+// 페이지 언로드 시 자동 새로고침 중지
+window.addEventListener('beforeunload', () => {
+    clearInterval(refreshInterval);
+});
+</script>
+{% endblock %}

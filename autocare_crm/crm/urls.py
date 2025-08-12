@@ -13,8 +13,15 @@ urlpatterns = [
     path('api/sidebar-stats/', views.sidebar_stats_api, name='sidebar_stats_api'),  # 추가
     path('customers/<int:pk>/approve-do-not-call/', views.approve_do_not_call, name='approve_do_not_call'),
     path('do-not-call-requests/', views.do_not_call_requests, name='do_not_call_requests'),
+    
     # 콜 배정 관련 URL 추가
     path('call-assignment/', views.call_assignment, name='call_assignment'),
     path('my-assignments/', views.my_assignments, name='my_assignments'),
     path('assignment/<int:assignment_id>/update/', views.update_assignment_status, name='update_assignment_status'),
+    
+    # 새로운 대시보드 URL 추가
+    path('team-dashboard/', views.team_dashboard, name='team_dashboard'),
+    path('admin-dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('api/team-performance/', views.team_performance_api, name='team_performance_api'),
+    path('api/agent-performance/<int:agent_id>/', views.agent_performance_api, name='agent_performance_api'),
 ]

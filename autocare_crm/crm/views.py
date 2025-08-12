@@ -1559,3 +1559,555 @@ def update_assignment_status(request, assignment_id):
             return JsonResponse({'success': False, 'error': str(e)})
     
     return JsonResponse({'success': False, 'error': 'POST 요청만 허용됩니다.'})
+
+# crm/views.py에 추가할 함수들
+@login_required
+@manager_required
+def team_dashboard(request):
+    """팀장 대시보드 - 팀원 성과 모니터링"""
+    today = timezone.now().date()
+    
+    # 팀장의 팀 정보 가져오기
+    user_profile = request.user.userprofile if hasattr(request.user, 'userprofile') else None
+    team_name = user_profile.team if user_profile else None
+    
+    # 팀원 가져오기 - 팀장 본인도 포함
+    if user_profile:
+        if user_profile.role == 'admin':
+            # 관리자는 모든 상담원 보기
+            team_agents = User.objects.filter(
+                is_active=True,
+                userprofile__role__in=['agent', 'manager']
+            ).select_related('userprofile')
+        elif team_name:
+            # 팀장은 같은 팀 멤버만
+            team_agents = User.objects.filter(
+                userprofile__team=team_name,
+                is_active=True
+            ).select_related('userprofile')
+        else:
+            # 팀이 없으면 본인만
+            team_agents = User.objects.filter(id=request.user.id)
+    else:
+        team_agents = User.objects.none()
+    
+    # 기간 설정 - 기본값 오늘
+    date_from_str = request.GET.get('date_from')
+    date_to_str = request.GET.get('date_to')
+    
+    if date_from_str:
+        try:
+            date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        except:
+            date_from = today
+    else:
+        date_from = today
+    
+    if date_to_str:
+        try:
+            date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+        except:
+            date_to = today
+    else:
+        date_to = today
+    
+    # 상담원별 성과 데이터 수집
+    agent_performances = []
+    
+    for agent in team_agents:
+        # 기간 내 통화 기록
+        calls = CallRecord.objects.filter(
+            caller=agent,
+            call_date__date__gte=date_from,
+            call_date__date__lte=date_to,
+            is_deleted=False
+        )
+        
+        # 오늘 통화만 별도 조회
+        calls_today = calls.filter(call_date__date=today)
+        
+        total_calls = calls.count()
+        connected_calls = calls.filter(call_result='connected').count()
+        
+        # 오늘 통화
+        today_total = calls_today.count()
+        today_connected = calls_today.filter(call_result='connected').count()
+        
+        # 관심 고객 수
+        interested_calls = calls.filter(
+            interest_type__in=['insurance', 'maintenance', 'financing', 'multiple']
+        ).count()
+        
+        # 후속조치 관련
+        followup_required = calls.filter(requires_follow_up=True).count()
+        followup_completed = calls.filter(
+            requires_follow_up=True,
+            follow_up_completed=True
+        ).count()
+        
+        # 오늘 배정된 고객 수
+        assigned_today = CallAssignment.objects.filter(
+            assigned_to=agent,
+            assigned_at__date=today,
+            status__in=['pending', 'in_progress']
+        ).count()
+        
+        # 오늘 완료한 배정
+        completed_today = CallAssignment.objects.filter(
+            assigned_to=agent,
+            status='completed',
+            completed_at__date=today  # completed_date -> completed_at
+        ).count()
+        
+        # 해피콜 성과 (오늘 기준)
+        happy_calls = {
+            '3month': calls_today.filter(
+                customer__actual_inspection_date__gte=today - timedelta(days=97),
+                customer__actual_inspection_date__lte=today - timedelta(days=83)
+            ).count(),
+            '6month': calls_today.filter(
+                customer__actual_inspection_date__gte=today - timedelta(days=187),
+                customer__actual_inspection_date__lte=today - timedelta(days=173)
+            ).count(),
+            '12month': calls_today.filter(
+                customer__actual_inspection_date__gte=today - timedelta(days=372),
+                customer__actual_inspection_date__lte=today - timedelta(days=358)
+            ).count(),
+            '18month': calls_today.filter(
+                customer__actual_inspection_date__gte=today - timedelta(days=555),
+                customer__actual_inspection_date__lte=today - timedelta(days=541)
+            ).count(),
+        }
+        
+        # 통화 성공률
+        success_rate = 0
+        if total_calls > 0:
+            success_rate = round((connected_calls / total_calls) * 100, 1)
+        
+        # 오늘 목표 달성률
+        daily_target = agent.userprofile.daily_call_target if hasattr(agent, 'userprofile') else 100
+        achievement_rate = 0
+        if daily_target > 0:
+            achievement_rate = round((today_total / daily_target) * 100, 1)
+        
+        # 마지막 활동 시간
+        last_call = calls_today.order_by('-call_date').first()
+        last_activity = last_call.call_date if last_call else None
+        
+        # 상태 판단 (30분 이내 활동이면 online)
+        status = 'offline'
+        if last_activity:
+            time_diff = timezone.now() - last_activity
+            if time_diff.seconds < 1800:  # 30분
+                status = 'online'
+            elif time_diff.seconds < 3600:  # 1시간
+                status = 'idle'
+        
+        agent_performances.append({
+            'agent': agent,
+            'total_calls': total_calls,
+            'connected_calls': connected_calls,
+            'today_total': today_total,
+            'today_connected': today_connected,
+            'success_rate': success_rate,
+            'interested_calls': interested_calls,
+            'followup_required': followup_required,
+            'followup_completed': followup_completed,
+            'assigned_today': assigned_today,
+            'completed_today': completed_today,
+            'happy_calls': happy_calls,
+            'daily_target': daily_target,
+            'achievement_rate': achievement_rate,
+            'status': status,
+            'last_activity': last_activity
+        })
+    
+    # 팀 전체 통계 (오늘 기준)
+    team_stats = {
+        'total_agents': len(team_agents),
+        'active_agents': sum(1 for p in agent_performances if p['status'] in ['online', 'idle']),
+        'total_calls': sum(p['today_total'] for p in agent_performances),
+        'total_connected': sum(p['today_connected'] for p in agent_performances),
+        'total_interested': sum(p['interested_calls'] for p in agent_performances),
+        'avg_success_rate': round(
+            sum(p['success_rate'] for p in agent_performances) / len(agent_performances), 1
+        ) if agent_performances else 0,
+        'avg_achievement_rate': round(
+            sum(p['achievement_rate'] for p in agent_performances) / len(agent_performances), 1
+        ) if agent_performances else 0,
+    }
+    
+    # 시간대별 통화 분포 (오늘)
+    hourly_data = []
+    max_hourly_calls = 0
+    
+    for hour in range(9, 19):  # 9시부터 18시까지
+        hour_calls = CallRecord.objects.filter(
+            caller__in=team_agents,
+            call_date__date=today,
+            call_date__hour=hour,
+            is_deleted=False
+        ).count()
+        
+        if hour_calls > max_hourly_calls:
+            max_hourly_calls = hour_calls
+        
+        hourly_data.append({
+            'hour': f"{hour:02d}:00",
+            'hour_display': f"{hour:02d}시",
+            'count': hour_calls
+        })
+    
+    # 비율 계산
+    if max_hourly_calls > 0:
+        for item in hourly_data:
+            item['percentage'] = round((item['count'] / max_hourly_calls) * 100, 1)
+    else:
+        for item in hourly_data:
+            item['percentage'] = 0
+    
+    # 최근 통화 기록 (팀 전체, 오늘)
+    recent_team_calls = CallRecord.objects.filter(
+        caller__in=team_agents,
+        call_date__date=today,
+        is_deleted=False
+    ).select_related('customer', 'caller').order_by('-call_date')[:20]
+    
+    # 미완료 후속조치 목록
+    pending_followups = CallRecord.objects.filter(
+        caller__in=team_agents,
+        requires_follow_up=True,
+        follow_up_completed=False,
+        is_deleted=False
+    ).select_related('customer', 'caller').order_by('follow_up_date')[:10]
+    
+    sidebar_stats = get_sidebar_stats()
+    
+    context = {
+        'team_name': team_name,
+        'team_agents': team_agents,
+        'agent_performances': agent_performances,
+        'team_stats': team_stats,
+        'hourly_data': hourly_data,
+        'recent_team_calls': recent_team_calls,
+        'pending_followups': pending_followups,
+        'date_from': date_from,
+        'date_to': date_to,
+        'today': today,
+    }
+    context.update(sidebar_stats)
+    
+    return render(request, 'team_dashboard.html', context)
+
+@login_required
+@admin_required
+def admin_dashboard(request):
+    """관리자 대시보드 - 전체 팀/팀장 성과 모니터링"""
+    today = timezone.now().date()
+    
+    # 기간 설정
+    date_from_str = request.GET.get('date_from')
+    date_to_str = request.GET.get('date_to')
+    
+    if date_from_str:
+        try:
+            date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        except:
+            date_from = today - timedelta(days=7)
+    else:
+        date_from = today - timedelta(days=7)  # 기본 7일
+    
+    if date_to_str:
+        try:
+            date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+        except:
+            date_to = today
+    else:
+        date_to = today
+    
+    # 팀별 성과 수집
+    teams = UserProfile.objects.values_list('team', flat=True).distinct().exclude(team='').exclude(team__isnull=True)
+    team_performances = []
+    
+    for team_name in teams:
+        # 팀 구성원
+        team_members = User.objects.filter(
+            userprofile__team=team_name,
+            is_active=True
+        ).select_related('userprofile')
+        
+        team_manager = team_members.filter(userprofile__role='manager').first()
+        team_agents = team_members.filter(userprofile__role='agent')
+        
+        # 팀 통화 기록
+        team_calls = CallRecord.objects.filter(
+            caller__in=team_members,
+            call_date__date__gte=date_from,
+            call_date__date__lte=date_to,
+            is_deleted=False
+        )
+        
+        total_calls = team_calls.count()
+        connected_calls = team_calls.filter(call_result='connected').count()
+        
+        # 팀 목표 및 달성률
+        team_daily_target = sum(
+            member.userprofile.daily_call_target 
+            for member in team_agents
+            if hasattr(member, 'userprofile')
+        )
+        
+        days_count = (date_to - date_from).days + 1
+        team_period_target = team_daily_target * days_count
+        
+        achievement_rate = 0
+        if team_period_target > 0:
+            achievement_rate = round((total_calls / team_period_target) * 100, 1)
+        
+        # 성공률
+        success_rate = 0
+        if total_calls > 0:
+            success_rate = round((connected_calls / total_calls) * 100, 1)
+        
+        # 관심 고객 및 후속조치
+        interested_customers = team_calls.filter(
+            interest_type__in=['insurance', 'maintenance', 'financing', 'multiple']
+        ).values('customer').distinct().count()
+        
+        followup_completion_rate = 0
+        followup_required = team_calls.filter(requires_follow_up=True).count()
+        if followup_required > 0:
+            followup_completed = team_calls.filter(
+                requires_follow_up=True,
+                follow_up_completed=True
+            ).count()
+            followup_completion_rate = round((followup_completed / followup_required) * 100, 1)
+        
+        # 관심 고객 비율 계산
+        interested_ratio = 0
+        if total_calls > 0:
+            interested_ratio = round((interested_customers / total_calls) * 100, 1)
+        
+        team_performances.append({
+            'team_name': team_name,
+            'manager': team_manager,
+            'agent_count': team_agents.count(),
+            'total_calls': total_calls,
+            'connected_calls': connected_calls,
+            'success_rate': success_rate,
+            'interested_customers': interested_customers,
+            'interested_ratio': interested_ratio,
+            'achievement_rate': achievement_rate,
+            'followup_completion_rate': followup_completion_rate,
+            'daily_target': team_daily_target,
+            'period_target': team_period_target,
+        })
+    
+    # 팀 성과 정렬 (달성률 높은 순)
+    team_performances = sorted(team_performances, key=lambda x: x['achievement_rate'], reverse=True)
+    
+    # 전체 통계
+    all_calls = CallRecord.objects.filter(
+        call_date__date__gte=date_from,
+        call_date__date__lte=date_to,
+        is_deleted=False
+    )
+    
+    overall_stats = {
+        'total_teams': len(teams),
+        'total_managers': User.objects.filter(userprofile__role='manager', is_active=True).count(),
+        'total_agents': User.objects.filter(userprofile__role='agent', is_active=True).count(),
+        'total_calls': all_calls.count(),
+        'total_connected': all_calls.filter(call_result='connected').count(),
+        'total_customers': Customer.objects.filter(
+            call_records__call_date__date__gte=date_from,
+            call_records__call_date__date__lte=date_to,
+            call_records__is_deleted=False
+        ).distinct().count(),
+        'new_interested': all_calls.filter(
+            interest_type__in=['insurance', 'maintenance', 'financing', 'multiple']
+        ).values('customer').distinct().count(),
+    }
+    
+    # 일별 성과 추이
+    daily_performance = []
+    current_date = date_from
+    while current_date <= date_to:
+        day_calls = all_calls.filter(call_date__date=current_date)
+        daily_performance.append({
+            'date': current_date,
+            'total': day_calls.count(),
+            'connected': day_calls.filter(call_result='connected').count(),
+        })
+        current_date += timedelta(days=1)
+    
+    # 상담원별 TOP 10 (기간 내)
+    top_agents = []
+    agents = User.objects.filter(userprofile__role='agent', is_active=True)
+    
+    for agent in agents:
+        agent_calls = CallRecord.objects.filter(
+            caller=agent,
+            call_date__date__gte=date_from,
+            call_date__date__lte=date_to,
+            is_deleted=False
+        )
+        total = agent_calls.count()
+        if total > 0:
+            connected = agent_calls.filter(call_result='connected').count()
+            success_rate = round((connected / total) * 100, 1) if total > 0 else 0
+            
+            top_agents.append({
+                'agent': agent,
+                'total_calls': total,
+                'connected_calls': connected,
+                'success_rate': success_rate,
+                'team': agent.userprofile.team if hasattr(agent, 'userprofile') else '-'
+            })
+    
+    # 통화 수 기준 정렬 후 상위 10명
+    top_agents = sorted(top_agents, key=lambda x: x['total_calls'], reverse=True)[:10]
+    
+    # 실시간 알림 생성
+    alerts = []
+    
+    # 목표 미달성 팀 체크
+    for team in team_performances[:3]:  # 상위 3개 팀만
+        if team['achievement_rate'] < 60:
+            alerts.append({
+                'type': 'warning',
+                'title': '목표 미달성 주의',
+                'message': f"{team['team_name']}팀의 목표 달성률이 60% 미만입니다.",
+                'time': '방금 전'
+            })
+    
+    # 후속조치 지연 체크
+    overdue_followups = CallRecord.objects.filter(
+        requires_follow_up=True,
+        follow_up_completed=False,
+        follow_up_date__lt=today,
+        is_deleted=False
+    ).count()
+    
+    if overdue_followups > 0:
+        alerts.append({
+            'type': 'danger',
+            'title': '후속조치 지연',
+            'message': f"{overdue_followups}건의 후속조치가 기한을 초과했습니다.",
+            'time': '10분 전'
+        })
+    
+    sidebar_stats = get_sidebar_stats()
+    
+    context = {
+        'team_performances': team_performances,
+        'overall_stats': overall_stats,
+        'daily_performance': daily_performance,
+        'top_agents': top_agents,
+        'alerts': alerts,
+        'date_from': date_from,
+        'date_to': date_to,
+        'today': today,
+    }
+    context.update(sidebar_stats)
+    
+    return render(request, 'admin_dashboard.html', context)
+
+
+@login_required
+@ajax_manager_required
+def team_performance_api(request):
+    """팀 성과 실시간 API"""
+    team_name = request.GET.get('team')
+    date_str = request.GET.get('date', timezone.now().date().isoformat())
+    
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except:
+        target_date = timezone.now().date()
+    
+    # 팀 구성원
+    if team_name:
+        team_members = User.objects.filter(
+            userprofile__team=team_name,
+            is_active=True
+        )
+    else:
+        team_members = User.objects.filter(
+            userprofile__role='agent',
+            is_active=True
+        )
+    
+    # 실시간 데이터
+    performance_data = []
+    for member in team_members:
+        calls_today = CallRecord.objects.filter(
+            caller=member,
+            call_date__date=target_date,
+            is_deleted=False
+        )
+        
+        performance_data.append({
+            'id': member.id,
+            'name': member.username,
+            'total_calls': calls_today.count(),
+            'connected': calls_today.filter(call_result='connected').count(),
+            'last_call': calls_today.order_by('-call_date').first().call_date.isoformat() if calls_today.exists() else None,
+            'status': 'active' if calls_today.filter(
+                call_date__gte=timezone.now() - timedelta(minutes=30)
+            ).exists() else 'idle'
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'data': performance_data,
+        'timestamp': timezone.now().isoformat()
+    })
+
+
+@login_required
+def agent_performance_api(request, agent_id):
+    """특정 상담원 상세 성과 API"""
+    try:
+        agent = User.objects.get(id=agent_id)
+        
+        # 권한 체크
+        if not request.user.userprofile.is_manager_or_above():
+            if request.user != agent:
+                return JsonResponse({'success': False, 'error': '권한이 없습니다.'})
+        
+        # 기간 설정
+        days = int(request.GET.get('days', 7))
+        date_from = timezone.now().date() - timedelta(days=days)
+        
+        # 일별 성과
+        daily_data = []
+        for i in range(days):
+            target_date = date_from + timedelta(days=i)
+            day_calls = CallRecord.objects.filter(
+                caller=agent,
+                call_date__date=target_date,
+                is_deleted=False
+            )
+            
+            daily_data.append({
+                'date': target_date.isoformat(),
+                'total': day_calls.count(),
+                'connected': day_calls.filter(call_result='connected').count(),
+                'interested': day_calls.filter(
+                    interest_type__in=['insurance', 'maintenance', 'financing', 'multiple']
+                ).count()
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'agent': {
+                'id': agent.id,
+                'name': agent.username,
+                'team': agent.userprofile.team if hasattr(agent, 'userprofile') else None
+            },
+            'daily_data': daily_data
+        })
+        
+    except User.DoesNotExist:
+        return JsonResponse({'success': False, 'error': '상담원을 찾을 수 없습니다.'})

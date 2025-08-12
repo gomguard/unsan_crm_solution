@@ -1,0 +1,587 @@
+{% extends 'base.html' %}
+
+{% block title %}관리자 대시보드{% endblock %}
+
+{% block extra_css %}
+<style>
+.team-card {
+    transition: all 0.3s ease;
+    border-top: 3px solid transparent;
+}
+.team-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+}
+.team-excellent { border-top-color: #10b981; background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); }
+.team-good { border-top-color: #3b82f6; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); }
+.team-average { border-top-color: #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%); }
+.team-poor { border-top-color: #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%); }
+
+.rank-1 { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); }
+.rank-2 { background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%); }
+.rank-3 { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 헤더 -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+            <i class="bi bi-bar-chart-line mr-3"></i>
+            관리자 대시보드
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">전체 조직 성과 모니터링 및 분석</p>
+    </div>
+    
+    <!-- 기간 필터 -->
+    <div class="mt-4 sm:mt-0">
+        <form method="get" class="flex gap-2 items-center">
+            <label class="text-sm text-gray-600">기간:</label>
+            <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <span class="text-gray-500">~</span>
+            <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <button type="submit" class="px-4 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary-hover">
+                <i class="bi bi-search mr-1"></i>조회
+            </button>
+            <div class="ml-2">
+                <button type="button" onclick="setDateRange(7)" class="px-3 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">7일</button>
+                <button type="button" onclick="setDateRange(30)" class="px-3 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 ml-1">30일</button>
+                <button type="button" onclick="setDateRange(90)" class="px-3 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 ml-1">90일</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 전체 통계 카드 -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+    <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-people text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_teams }}</div>
+            <div class="text-sm opacity-90">팀</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-person-badge text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_managers }}</div>
+            <div class="text-sm opacity-90">팀장</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-headset text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_agents }}</div>
+            <div class="text-sm opacity-90">상담원</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-telephone text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_calls|floatformat:0 }}</div>
+            <div class="text-sm opacity-90">총 통화</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-check-circle text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_connected|floatformat:0 }}</div>
+            <div class="text-sm opacity-90">통화 성공</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-person-check text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.total_customers|floatformat:0 }}</div>
+            <div class="text-sm opacity-90">접촉 고객</div>
+        </div>
+    </div>
+    
+    <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-lg p-4">
+        <div class="text-center">
+            <i class="bi bi-star text-3xl mb-2 opacity-80"></i>
+            <div class="text-3xl font-bold">{{ overall_stats.new_interested|floatformat:0 }}</div>
+            <div class="text-sm opacity-90">관심 고객</div>
+        </div>
+    </div>
+</div>
+
+<!-- 일별 성과 추이 차트 -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">일별 성과 추이</h2>
+    <div class="h-64">
+        <canvas id="dailyChart"></canvas>
+    </div>
+</div>
+
+<!-- 팀별 성과 카드 -->
+<div class="mb-8">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">팀별 성과 현황</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for team in team_performances %}
+        <div class="bg-white rounded-lg shadow-sm team-card 
+            {% if team.achievement_rate >= 100 %}team-excellent
+            {% elif team.achievement_rate >= 80 %}team-good
+            {% elif team.achievement_rate >= 60 %}team-average
+            {% else %}team-poor{% endif %}">
+            
+            <!-- 팀 헤더 -->
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">{{ team.team_name }}</h3>
+                        <p class="text-sm text-gray-600">
+                            팀장: {{ team.manager.username|default:"미지정" }}
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold 
+                            {% if team.achievement_rate >= 100 %}text-green-600
+                            {% elif team.achievement_rate >= 80 %}text-blue-600
+                            {% elif team.achievement_rate >= 60 %}text-yellow-600
+                            {% else %}text-red-600{% endif %}">
+                            {{ team.achievement_rate }}%
+                        </div>
+                        <div class="text-xs text-gray-500">목표 달성률</div>
+                    </div>
+                </div>
+                
+                <!-- 진행률 바 -->
+                <div class="mb-4">
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="h-3 rounded-full transition-all duration-500
+                            {% if team.achievement_rate >= 100 %}bg-green-500
+                            {% elif team.achievement_rate >= 80 %}bg-blue-500
+                            {% elif team.achievement_rate >= 60 %}bg-yellow-500
+                            {% else %}bg-red-500{% endif %}"
+                            style="width: {% if team.achievement_rate > 100 %}100%{% else %}{{ team.achievement_rate }}%{% endif %}">
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>실적: {{ team.total_calls|floatformat:0 }}건</span>
+                        <span>목표: {{ team.period_target|floatformat:0 }}건</span>
+                    </div>
+                </div>
+                
+                <!-- 상세 지표 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-600">상담원</p>
+                                <p class="text-lg font-bold text-gray-900">{{ team.agent_count }}명</p>
+                            </div>
+                            <i class="bi bi-people text-2xl text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-600">통화 성공</p>
+                                <p class="text-lg font-bold text-green-600">{{ team.connected_calls|floatformat:0 }}</p>
+                            </div>
+                            <i class="bi bi-telephone-check text-2xl text-green-400"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-600">성공률</p>
+                                <p class="text-lg font-bold text-blue-600">{{ team.success_rate }}%</p>
+                            </div>
+                            <i class="bi bi-graph-up text-2xl text-blue-400"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-gray-600">관심 고객</p>
+                                <p class="text-lg font-bold text-purple-600">{{ team.interested_customers }}</p>
+                            </div>
+                            <i class="bi bi-star text-2xl text-purple-400"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 후속조치 완료율 -->
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">후속조치 완료율</span>
+                        <span class="text-sm font-bold 
+                            {% if team.followup_completion_rate >= 80 %}text-green-600
+                            {% elif team.followup_completion_rate >= 60 %}text-yellow-600
+                            {% else %}text-red-600{% endif %}">
+                            {{ team.followup_completion_rate }}%
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div class="h-2 rounded-full 
+                            {% if team.followup_completion_rate >= 80 %}bg-green-500
+                            {% elif team.followup_completion_rate >= 60 %}bg-yellow-500
+                            {% else %}bg-red-500{% endif %}"
+                            style="width: {{ team.followup_completion_rate }}%">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 액션 버튼 -->
+                <div class="mt-4 flex gap-2">
+                    <a href="{% url 'team_dashboard' %}?team={{ team.team_name }}" 
+                       class="flex-1 text-center px-3 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary-hover">
+                        <i class="bi bi-eye mr-1"></i>상세보기
+                    </a>
+                    <button onclick="compareTeam('{{ team.team_name }}')"
+                            class="flex-1 px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50">
+                        <i class="bi bi-bar-chart mr-1"></i>비교
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- TOP 10 상담원 -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">
+                <i class="bi bi-trophy text-yellow-500 mr-2"></i>
+                TOP 10 상담원
+            </h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3">
+                {% for agent in top_agents %}
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold
+                            {% if forloop.counter == 1 %}rank-1
+                            {% elif forloop.counter == 2 %}rank-2
+                            {% elif forloop.counter == 3 %}rank-3
+                            {% else %}bg-gray-400{% endif %}">
+                            {{ forloop.counter }}
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-gray-900">{{ agent.agent.username }}</p>
+                            <p class="text-xs text-gray-500">{{ agent.team }}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-lg font-bold text-gray-900">{{ agent.total_calls }}</p>
+                        <p class="text-xs text-gray-500">
+                            성공 {{ agent.connected_calls }}건
+                            ({{ agent.success_rate }}%)
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 실시간 알림 -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">
+                <i class="bi bi-bell text-red-500 mr-2"></i>
+                실시간 알림
+            </h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3" id="realTimeAlerts">
+                <div class="flex items-start p-3 bg-red-50 rounded-lg">
+                    <i class="bi bi-exclamation-circle-fill text-red-500 mr-3"></i>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">목표 미달성 주의</p>
+                        <p class="text-xs text-gray-600">A팀의 일일 목표 달성률이 60% 미만입니다.</p>
+                        <p class="text-xs text-gray-500 mt-1">5분 전</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-start p-3 bg-yellow-50 rounded-lg">
+                    <i class="bi bi-clock-fill text-yellow-500 mr-3"></i>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">후속조치 지연</p>
+                        <p class="text-xs text-gray-600">15건의 후속조치가 기한을 초과했습니다.</p>
+                        <p class="text-xs text-gray-500 mt-1">10분 전</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-start p-3 bg-green-50 rounded-lg">
+                    <i class="bi bi-check-circle-fill text-green-500 mr-3"></i>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">목표 달성</p>
+                        <p class="text-xs text-gray-600">B팀이 일일 목표를 120% 달성했습니다!</p>
+                        <p class="text-xs text-gray-500 mt-1">30분 전</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 팀 비교 모달 -->
+<div id="teamCompareModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">팀 성과 비교</h3>
+            <button onclick="closeCompareModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div id="compareContent">
+            <!-- 동적 로드 -->
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 일별 성과 차트
+const ctx = document.getElementById('dailyChart').getContext('2d');
+const dailyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [{% for day in daily_performance %}'{{ day.date|date:"m/d" }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+        datasets: [{
+            label: '총 통화',
+            data: [{% for day in daily_performance %}{{ day.total }}{% if not forloop.last %},{% endif %}{% endfor %}],
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1
+        }, {
+            label: '통화 성공',
+            data: [{% for day in daily_performance %}{{ day.connected }}{% if not forloop.last %},{% endif %}{% endfor %}],
+            borderColor: 'rgb(16, 185, 129)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// 날짜 범위 설정
+function setDateRange(days) {
+    const today = new Date();
+    const from = new Date(today.getTime() - (days * 24 * 60 * 60 * 1000));
+    
+    document.querySelector('input[name="date_from"]').value = from.toISOString().split('T')[0];
+    document.querySelector('input[name="date_to"]').value = today.toISOString().split('T')[0];
+    document.querySelector('form').submit();
+}
+
+// 팀 비교
+function compareTeam(teamName) {
+    document.getElementById('teamCompareModal').classList.remove('hidden');
+    document.getElementById('compareContent').innerHTML = `
+        <div class="text-center py-8">
+            <i class="bi bi-arrow-repeat animate-spin text-3xl text-primary"></i>
+            <p class="mt-2 text-gray-600">데이터 로딩 중...</p>
+        </div>
+    `;
+    
+    // 실제로는 AJAX로 데이터를 가져와서 차트 생성
+    setTimeout(() => {
+        renderCompareChart(teamName);
+    }, 1000);
+}
+
+function renderCompareChart(teamName) {
+    const content = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">통화 실적 비교</h4>
+                <canvas id="compareCallsChart"></canvas>
+            </div>
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">목표 달성률 비교</h4>
+                <canvas id="compareAchievementChart"></canvas>
+            </div>
+        </div>
+        <div class="mt-6">
+            <h4 class="text-sm font-medium text-gray-900 mb-3">주요 지표 비교</h4>
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">팀</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">총 통화</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">성공률</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">관심 고객</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">목표 달성률</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for team in team_performances %}
+                    <tr class="{% if team.team_name == teamName %}bg-blue-50{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ team.team_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ team.total_calls }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ team.success_rate }}%
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ team.interested_customers }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium
+                            {% if team.achievement_rate >= 100 %}text-green-600
+                            {% elif team.achievement_rate >= 80 %}text-blue-600
+                            {% elif team.achievement_rate >= 60 %}text-yellow-600
+                            {% else %}text-red-600{% endif %}">
+                            {{ team.achievement_rate }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    document.getElementById('compareContent').innerHTML = content;
+    
+    // 비교 차트 생성
+    new Chart(document.getElementById('compareCallsChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: [{% for team in team_performances %}'{{ team.team_name }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+            datasets: [{
+                label: '총 통화',
+                data: [{% for team in team_performances %}{{ team.total_calls }}{% if not forloop.last %},{% endif %}{% endfor %}],
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+            }, {
+                label: '통화 성공',
+                data: [{% for team in team_performances %}{{ team.connected_calls }}{% if not forloop.last %},{% endif %}{% endfor %}],
+                backgroundColor: 'rgba(16, 185, 129, 0.5)',
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
+    });
+    
+    new Chart(document.getElementById('compareAchievementChart').getContext('2d'), {
+        type: 'radar',
+        data: {
+            labels: ['목표 달성률', '통화 성공률', '후속조치 완료율', '관심 고객 비율'],
+            datasets: [
+                {% for team in team_performances|slice:":3" %}
+                {
+                    label: '{{ team.team_name }}',
+                    data: [
+                        {{ team.achievement_rate }},
+                        {{ team.success_rate }},
+                        {{ team.followup_completion_rate }},
+                        {{ team.interested_ratio }}
+                    ],
+                    borderColor: '{% if forloop.counter == 1 %}rgb(59, 130, 246){% elif forloop.counter == 2 %}rgb(16, 185, 129){% else %}rgb(245, 158, 11){% endif %}',
+                    backgroundColor: '{% if forloop.counter == 1 %}rgba(59, 130, 246, 0.2){% elif forloop.counter == 2 %}rgba(16, 185, 129, 0.2){% else %}rgba(245, 158, 11, 0.2){% endif %}',
+                }{% if not forloop.last %},{% endif %}
+                {% endfor %}
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+}
+
+function closeCompareModal() {
+    document.getElementById('teamCompareModal').classList.add('hidden');
+}
+
+// 실시간 알림 업데이트
+function updateRealTimeAlerts() {
+    // AJAX로 실시간 알림 가져오기
+    fetch('{% url "team_performance_api" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 알림 업데이트 로직
+                console.log('Alerts updated');
+            }
+        });
+}
+
+// 30초마다 실시간 알림 업데이트
+setInterval(updateRealTimeAlerts, 30000);
+
+// 페이지 로드 시 애니메이션
+document.addEventListener('DOMContentLoaded', function() {
+    // 카드 애니메이션
+    const cards = document.querySelectorAll('.team-card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+    
+    // 숫자 카운트업 애니메이션
+    const countElements = document.querySelectorAll('.text-3xl.font-bold');
+    countElements.forEach(element => {
+        const target = parseInt(element.textContent);
+        let current = 0;
+        const increment = target / 50;
+        const timer = setInterval(() => {
+            current += increment;
+            if (current >= target) {
+                element.textContent = target;
+                clearInterval(timer);
+            } else {
+                element.textContent = Math.floor(current);
+            }
+        }, 20);
+    });
+});
+</script>
+{% endblock %}

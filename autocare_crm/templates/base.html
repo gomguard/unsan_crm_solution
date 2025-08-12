@@ -66,26 +66,50 @@
                     <!-- 네비게이션 -->
                     <nav class="mt-5 flex-1 px-2 space-y-1">
                         <a href="{% url 'dashboard' %}" 
-                           class="{% if request.resolver_match.url_name == 'dashboard' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                        class="{% if request.resolver_match.url_name == 'dashboard' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
                             <i class="bi bi-speedometer2 mr-3 text-lg"></i>
                             대시보드
                         </a>
 
+                        <!-- 관리자 대시보드 (관리자만) -->
+                        {% if user.userprofile.is_admin %}
+                        <a href="{% url 'admin_dashboard' %}"
+                        class="{% if request.resolver_match.url_name == 'admin_dashboard' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-bar-chart-line mr-3 text-lg"></i>
+                            관리자 대시보드
+                            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
+                                Admin
+                            </span>
+                        </a>
+                        {% endif %}
+
+                        <!-- 팀 대시보드 (팀장만) -->
+                        {% if user.userprofile.is_manager_or_above %}
+                        <a href="{% url 'team_dashboard' %}"
+                        class="{% if request.resolver_match.url_name == 'team_dashboard' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-people-fill mr-3 text-lg"></i>
+                            팀 대시보드
+                            <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-600 text-white">
+                                Team
+                            </span>
+                        </a>
+                        {% endif %}
+
                         <a href="{% url 'customer_list' %}"
-                           class="{% if request.resolver_match.url_name == 'customer_list' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                        class="{% if request.resolver_match.url_name == 'customer_list' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
                             <i class="bi bi-people mr-3 text-lg"></i>
                             고객관리
                         </a>
 
                         <a href="{% url 'call_records' %}"
-                           class="{% if request.resolver_match.url_name == 'call_records' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                        class="{% if request.resolver_match.url_name == 'call_records' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
                             <i class="bi bi-telephone mr-3 text-lg"></i>
                             통화기록
                         </a>
 
                         {% if user.userprofile.role == 'agent' %}
                         <a href="{% url 'my_assignments' %}"
-                           class="{% if request.resolver_match.url_name == 'my_assignments' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                        class="{% if request.resolver_match.url_name == 'my_assignments' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
                             <i class="bi bi-clipboard-check mr-3 text-lg"></i>
                             내 배정목록
                             {% if my_pending_assignments > 0 %}
@@ -98,8 +122,8 @@
 
                         {% if user.userprofile.is_manager_or_above %}
                         <a href="{% url 'call_assignment' %}"
-                           class="{% if request.resolver_match.url_name == 'call_assignment' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
-                            <i class="bi bi-people-fill mr-3 text-lg"></i>
+                        class="{% if request.resolver_match.url_name == 'call_assignment' %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %} group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors">
+                            <i class="bi bi-clipboard-data mr-3 text-lg"></i>
                             콜 배정관리
                         </a>
                         {% endif %}
