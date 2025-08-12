@@ -268,7 +268,11 @@
                             <p class="text-sm font-bold text-gray-900">
                                 {{ performance.agent.username }}
                                 {% if performance.is_manager %}
-                                    <span class="ml-1 text-xs font-normal text-purple-600">(팀장)</span>
+                                    {% if performance.agent.userprofile.role == 'admin' %}
+                                        <span class="ml-1 text-xs font-normal text-red-600">(관리자)</span>
+                                    {% else %}
+                                        <span class="ml-1 text-xs font-normal text-purple-600">(팀장)</span>
+                                    {% endif %}
                                 {% endif %}
                             </p>
                             <div class="flex items-center text-xs text-gray-500">

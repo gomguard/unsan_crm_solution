@@ -1566,14 +1566,47 @@ def update_assignment_status(request, assignment_id):
 def team_dashboard(request):
     """팀장 대시보드 - 팀원 성과 모니터링"""
     today = timezone.now().date()
+    # 🔴 디버그 코드 추가 - 사용자 정보 확인
+    print("="*50)
+    print(f"[DEBUG] 현재 사용자: {request.user.username}")
+    print(f"[DEBUG] is_staff: {request.user.is_staff}")
+    print(f"[DEBUG] is_superuser: {request.user.is_superuser}")
     
     # 사용자 프로필 및 권한 확인
     user_profile = request.user.userprofile if hasattr(request.user, 'userprofile') else None
+
+    # 🔴 디버그 코드 추가 - 프로필 정보 확인
+    if user_profile:
+        print(f"[DEBUG] UserProfile 존재: role={user_profile.role}, team={user_profile.team}")
+        print(f"[DEBUG] is_admin: {user_profile.role == 'admin'}")
+        print(f"[DEBUG] is_manager_or_above: {user_profile.is_manager_or_above()}")
+    else:
+        print("[DEBUG] ⚠️ UserProfile이 없습니다!")
+        # UserProfile이 없는 경우 생성
+        from crm.models import UserProfile
+        user_profile, created = UserProfile.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'role': 'admin' if request.user.is_superuser else 'agent',
+                'team': '운영팀' if request.user.is_superuser else '',
+                'daily_call_target': 0 if request.user.is_superuser else 100
+            }
+        )
+        if created:
+            print(f"[DEBUG] ✅ UserProfile 생성됨: role={user_profile.role}")
+    
+
     is_admin = user_profile and user_profile.role == 'admin'
     
+    print(f"[DEBUG] is_admin 최종값: {is_admin}")
+    print("="*50)
+
     # 사용 가능한 팀 목록 생성
     available_teams = []
     selected_team = request.GET.get('team', '')
+    
+    # 🔴 디버그 코드 추가 - 팀 목록 확인
+    print(f"[DEBUG] selected_team 파라미터: {selected_team}")
     
     if is_admin:
         # 관리자는 모든 팀 목록 가져오기
@@ -1583,33 +1616,64 @@ def team_dashboard(request):
             team=''
         ).values_list('team', flat=True).distinct().order_by('team')
         
-        # 선택된 팀이 없으면 전체 보기
+        print(f"[DEBUG] 사용 가능한 팀 목록: {list(available_teams)}")
+
         if selected_team and selected_team in available_teams:
-            # 특정 팀 선택됨
+            # 특정 팀 선택됨 - 팀장과 팀원 모두 포함
+            print(f"[DEBUG] 특정 팀 선택: {selected_team}")
+
+            from django.db.models import Q
             team_agents = User.objects.filter(
-                userprofile__team=selected_team,
+                Q(userprofile__team=selected_team),
                 is_active=True
-            ).select_related('userprofile')
+            ).select_related('userprofile').order_by(
+                '-userprofile__role',  # 팀장(manager)이 먼저 오도록
+                'username'
+            )
         else:
             # 전체 팀 보기
+            print("[DEBUG] 전체 팀 보기 모드")
+
             selected_team = ''
             team_agents = User.objects.filter(
                 is_active=True,
-                userprofile__role__in=['agent', 'manager']
-            ).select_related('userprofile')
+                userprofile__role__in=['agent', 'manager', 'admin']  # ⭐ 모든 역할 포함
+            ).select_related('userprofile').order_by(
+                '-userprofile__role',
+                'username'
+            )
     else:
         # 팀장은 자기 팀만
+        print("[DEBUG] 팀장 모드로 팀 조회")
+
         team_name = user_profile.team if user_profile else None
+        print(f"[DEBUG] 팀장의 팀: {team_name}")
+
         if team_name:
             selected_team = team_name
+            # 팀장 본인과 팀원들 모두 포함
+            from django.db.models import Q
             team_agents = User.objects.filter(
-                userprofile__team=team_name,
+                Q(userprofile__team=team_name),
                 is_active=True
-            ).select_related('userprofile')
+            ).select_related('userprofile').order_by(
+                '-userprofile__role',  # 팀장이 먼저 오도록
+                'username'
+            )
         else:
+            print("[DEBUG] ⚠️ 팀이 없어서 본인만 표시")
             # 팀이 없으면 본인만
             team_agents = User.objects.filter(id=request.user.id)
-    
+            
+    # 🔴 디버그: 최종 팀 구성원 목록
+    print(f"[DEBUG] 최종 팀 구성원 수: {team_agents.count()}")
+    for agent in team_agents:
+        if hasattr(agent, 'userprofile'):
+            print(f"  - {agent.username}: role={agent.userprofile.role}, team={agent.userprofile.team}")
+        else:
+            print(f"  - {agent.username}: UserProfile 없음")
+    print("="*50)
+
     # 기간 설정 - 기본값 오늘
     date_from_str = request.GET.get('date_from')
     date_to_str = request.GET.get('date_to')
@@ -1631,10 +1695,14 @@ def team_dashboard(request):
         date_to = today
     
     # 상담원별 성과 데이터 수집
+    # 상담원별 성과 데이터 수집
     agent_performances = []
     
+    # 디버그: 팀 구성원 확인
+    print(f"팀 구성원 수: {team_agents.count()}")
     for agent in team_agents:
-        # 기간 내 통화 기록
+        print(f"- {agent.username} (역할: {agent.userprofile.role if hasattr(agent, 'userprofile') else 'N/A'})")
+
         calls = CallRecord.objects.filter(
             caller=agent,
             call_date__date__gte=date_from,
@@ -1723,7 +1791,7 @@ def team_dashboard(request):
                 status = 'idle'
         
         # 팀장 여부 확인
-        is_manager = hasattr(agent, 'userprofile') and agent.userprofile.role == 'manager'
+        is_manager = hasattr(agent, 'userprofile') and agent.userprofile.role in ['manager', 'admin']
         
         # 정렬을 위한 sort_key 추가 (팀장은 999999로 설정하여 항상 앞에 오도록)
         sort_key = 999999 if is_manager else achievement_rate
@@ -1817,8 +1885,8 @@ def team_dashboard(request):
                 is_active=True
             ).select_related('userprofile')
             
-            team_manager = team_members.filter(userprofile__role='manager').first()
-            team_agent_count = team_members.filter(userprofile__role='agent').count()
+            team_manager = team_members.filter(userprofile__role__in=['manager', 'admin']).first()
+            team_agent_count = team_members.count()  
             
             # 오늘 통화 통계
             team_calls_today = CallRecord.objects.filter(
@@ -1907,18 +1975,18 @@ def admin_dashboard(request):
     team_performances = []
     
     for team_name in teams:
-        # 팀 구성원
+        # 팀 구성원 (팀장 + 팀원 모두 포함)
         team_members = User.objects.filter(
             userprofile__team=team_name,
             is_active=True
         ).select_related('userprofile')
         
-        team_manager = team_members.filter(userprofile__role='manager').first()
-        team_agents = team_members.filter(userprofile__role='agent')
+        team_manager = team_members.filter(userprofile__role__in=['manager', 'admin']).first()
+        team_agents = team_members  # 팀장 포함 전체를 agents로 사용
         
         # 팀 통화 기록
         team_calls = CallRecord.objects.filter(
-            caller__in=team_members,
+            caller__in=team_members,  # team_agents 대신 team_members 사용
             call_date__date__gte=date_from,
             call_date__date__lte=date_to,
             is_deleted=False

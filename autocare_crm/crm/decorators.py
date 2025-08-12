@@ -7,6 +7,8 @@ def manager_required(view_func):
     """팀장 이상 권한 필요"""
     @wraps(view_func)
     def wrapped_view(request, *args, **kwargs):
+        print(f"[DECORATOR] manager_required 체크: user={request.user.username}")
+
         if not hasattr(request.user, 'userprofile'):
             messages.error(request, '사용자 프로필이 없습니다.')
             return redirect('dashboard')
