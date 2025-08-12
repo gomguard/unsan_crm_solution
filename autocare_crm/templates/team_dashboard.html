@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}팀 대시보드 - {{ team_name|default:"전체" }}{% endblock %}
+{% block title %}팀 대시보드 - {{ selected_team|default:"전체" }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -35,16 +35,26 @@
         <h1 class="text-2xl font-bold text-gray-900 flex items-center">
             <i class="bi bi-speedometer2 mr-2"></i>
             팀 대시보드
-            {% if team_name %}
-                <span class="ml-3 text-lg font-normal text-gray-600">{{ team_name }} 팀</span>
+            {% if selected_team %}
+                <span class="ml-3 text-lg font-normal text-gray-600">{{ selected_team }} 팀</span>
+            {% else %}
+                <span class="ml-3 text-lg font-normal text-gray-600">전체 팀</span>
             {% endif %}
         </h1>
         <p class="text-sm text-gray-500 mt-1">실시간 팀원 성과 모니터링</p>
     </div>
     
-    <!-- 날짜 필터 -->
+    <!-- 팀 선택 및 날짜 필터 -->
     <div class="mt-4 sm:mt-0">
         <form method="get" class="flex gap-2">
+            {% if available_teams %}
+            <select name="team" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">전체 팀</option>
+                {% for team in available_teams %}
+                    <option value="{{ team }}" {% if team == selected_team %}selected{% endif %}>{{ team }} 팀</option>
+                {% endfor %}
+            </select>
+            {% endif %}
             <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"
                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
             <span class="self-center text-gray-500">~</span>
@@ -56,6 +66,45 @@
         </form>
     </div>
 </div>
+
+<!-- 팀별 요약 (관리자만, 전체 팀 보기 시) -->
+{% if is_admin and not selected_team and team_summaries %}
+<div class="mb-6">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">팀별 요약</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {% for summary in team_summaries %}
+        <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="location.href='?team={{ summary.team_name }}'">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-medium text-gray-900">{{ summary.team_name }} 팀</h3>
+                <span class="text-xs text-gray-500">{{ summary.agent_count }}명</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                    <span class="text-gray-600">오늘 통화:</span>
+                    <span class="font-bold">{{ summary.today_calls }}</span>
+                </div>
+                <div>
+                    <span class="text-gray-600">성공률:</span>
+                    <span class="font-bold {% if summary.success_rate >= 70 %}text-green-600{% elif summary.success_rate >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                        {{ summary.success_rate }}%
+                    </span>
+                </div>
+                <div>
+                    <span class="text-gray-600">목표달성:</span>
+                    <span class="font-bold {% if summary.achievement_rate >= 100 %}text-green-600{% elif summary.achievement_rate >= 80 %}text-blue-600{% elif summary.achievement_rate >= 60 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                        {{ summary.achievement_rate }}%
+                    </span>
+                </div>
+                <div>
+                    <span class="text-gray-600">팀장:</span>
+                    <span class="font-medium">{{ summary.manager_name|default:"미지정" }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- 팀 전체 요약 -->
 <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
@@ -130,7 +179,10 @@
 
 <!-- 상담원별 성과 카드 -->
 <div class="mb-6">
-    <h2 class="text-lg font-medium text-gray-900 mb-4">상담원별 실시간 성과</h2>
+    <h2 class="text-lg font-medium text-gray-900 mb-4">
+        상담원별 실시간 성과
+        <span class="text-sm font-normal text-gray-500 ml-2">({{ agent_performances|length }}명)</span>
+    </h2>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for performance in agent_performances %}
         <div class="bg-white rounded-lg shadow-sm performance-card 
@@ -156,7 +208,10 @@
                             <p class="text-sm font-medium text-gray-900">{{ performance.agent.username }}</p>
                             <p class="text-xs text-gray-500">
                                 {% if performance.agent.userprofile.team %}
-                                    {{ performance.agent.userprofile.team }}
+                                    {{ performance.agent.userprofile.team }} 팀
+                                {% endif %}
+                                {% if performance.agent.userprofile.role == 'manager' %}
+                                    <span class="ml-1 inline-flex px-1.5 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-800">팀장</span>
                                 {% endif %}
                                 {% if performance.status == 'online' %}
                                     <span class="text-green-600 ml-1">● 활동중</span>
@@ -214,6 +269,10 @@
                 
                 <!-- 상세 지표 -->
                 <div class="space-y-2 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">기간 총 통화</span>
+                        <span class="font-medium">{{ performance.total_calls }}건</span>
+                    </div>
                     <div class="flex justify-between">
                         <span class="text-gray-600">성공률</span>
                         <span class="font-medium">{{ performance.success_rate }}%</span>
@@ -368,7 +427,10 @@ let refreshInterval = setInterval(() => {
 }, 30000);
 
 function fetchTeamPerformance() {
-    fetch('{% url "team_performance_api" %}?team={{ team_name|default:"" }}')
+    const urlParams = new URLSearchParams(window.location.search);
+    const team = urlParams.get('team') || '';
+    
+    fetch(`{% url "team_performance_api" %}?team=${team}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {

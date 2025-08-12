@@ -1560,27 +1560,48 @@ def update_assignment_status(request, assignment_id):
     
     return JsonResponse({'success': False, 'error': 'POST 요청만 허용됩니다.'})
 
-# crm/views.py에 추가할 함수들
+
 @login_required
 @manager_required
 def team_dashboard(request):
     """팀장 대시보드 - 팀원 성과 모니터링"""
     today = timezone.now().date()
     
-    # 팀장의 팀 정보 가져오기
+    # 사용자 프로필 및 권한 확인
     user_profile = request.user.userprofile if hasattr(request.user, 'userprofile') else None
-    team_name = user_profile.team if user_profile else None
+    is_admin = user_profile and user_profile.role == 'admin'
     
-    # 팀원 가져오기 - 팀장 본인도 포함
-    if user_profile:
-        if user_profile.role == 'admin':
-            # 관리자는 모든 상담원 보기
+    # 사용 가능한 팀 목록 생성
+    available_teams = []
+    selected_team = request.GET.get('team', '')
+    
+    if is_admin:
+        # 관리자는 모든 팀 목록 가져오기
+        available_teams = UserProfile.objects.exclude(
+            team__isnull=True
+        ).exclude(
+            team=''
+        ).values_list('team', flat=True).distinct().order_by('team')
+        
+        # 선택된 팀이 없으면 전체 보기
+        if selected_team and selected_team in available_teams:
+            # 특정 팀 선택됨
+            team_agents = User.objects.filter(
+                userprofile__team=selected_team,
+                is_active=True
+            ).select_related('userprofile')
+        else:
+            # 전체 팀 보기
+            selected_team = ''
             team_agents = User.objects.filter(
                 is_active=True,
                 userprofile__role__in=['agent', 'manager']
             ).select_related('userprofile')
-        elif team_name:
-            # 팀장은 같은 팀 멤버만
+    else:
+        # 팀장은 자기 팀만
+        team_name = user_profile.team if user_profile else None
+        if team_name:
+            selected_team = team_name
             team_agents = User.objects.filter(
                 userprofile__team=team_name,
                 is_active=True
@@ -1588,8 +1609,6 @@ def team_dashboard(request):
         else:
             # 팀이 없으면 본인만
             team_agents = User.objects.filter(id=request.user.id)
-    else:
-        team_agents = User.objects.none()
     
     # 기간 설정 - 기본값 오늘
     date_from_str = request.GET.get('date_from')
@@ -1656,7 +1675,7 @@ def team_dashboard(request):
         completed_today = CallAssignment.objects.filter(
             assigned_to=agent,
             status='completed',
-            completed_at__date=today  # completed_date -> completed_at
+            completed_at__date=today
         ).count()
         
         # 해피콜 성과 (오늘 기준)
@@ -1781,10 +1800,59 @@ def team_dashboard(request):
         is_deleted=False
     ).select_related('customer', 'caller').order_by('follow_up_date')[:10]
     
+    # 팀별 요약 (관리자가 전체 팀 볼 때만)
+    team_summaries = []
+    if is_admin and not selected_team and available_teams:
+        for team in available_teams:
+            team_members = User.objects.filter(
+                userprofile__team=team,
+                is_active=True
+            ).select_related('userprofile')
+            
+            team_manager = team_members.filter(userprofile__role='manager').first()
+            team_agent_count = team_members.filter(userprofile__role='agent').count()
+            
+            # 오늘 통화 통계
+            team_calls_today = CallRecord.objects.filter(
+                caller__in=team_members,
+                call_date__date=today,
+                is_deleted=False
+            )
+            
+            total_today = team_calls_today.count()
+            connected_today = team_calls_today.filter(call_result='connected').count()
+            
+            # 목표 달성률 계산
+            team_daily_target = sum(
+                member.userprofile.daily_call_target 
+                for member in team_members 
+                if hasattr(member, 'userprofile')
+            )
+            
+            achievement_rate = 0
+            if team_daily_target > 0:
+                achievement_rate = round((total_today / team_daily_target) * 100, 1)
+            
+            success_rate = 0
+            if total_today > 0:
+                success_rate = round((connected_today / total_today) * 100, 1)
+            
+            team_summaries.append({
+                'team_name': team,
+                'manager_name': team_manager.username if team_manager else None,
+                'agent_count': team_agent_count,
+                'today_calls': total_today,
+                'success_rate': success_rate,
+                'achievement_rate': achievement_rate,
+            })
+    
     sidebar_stats = get_sidebar_stats()
     
     context = {
-        'team_name': team_name,
+        'selected_team': selected_team,
+        'available_teams': list(available_teams) if available_teams else [],
+        'is_admin': is_admin,
+        'team_summaries': team_summaries,
         'team_agents': team_agents,
         'agent_performances': agent_performances,
         'team_stats': team_stats,
@@ -1798,6 +1866,7 @@ def team_dashboard(request):
     context.update(sidebar_stats)
     
     return render(request, 'team_dashboard.html', context)
+
 
 @login_required
 @admin_required
